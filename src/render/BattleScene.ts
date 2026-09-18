@@ -63,10 +63,10 @@ export class BattleScene extends Phaser.Scene {
 
     this.panel = this.add.text(px, 12, '', { fontFamily: 'monospace', fontSize: '14px', color: '#e6e6e6', wordWrap: { width: PANEL_W - 24 } });
     this.endTurnBtn = this.add
-      .text(px, 250, ' END TURN (E) ', { fontFamily: 'monospace', fontSize: '16px', color: '#111', backgroundColor: '#f0c14b', padding: { x: 8, y: 6 } })
+      .text(px, 372, ' END TURN (E) ', { fontFamily: 'monospace', fontSize: '16px', color: '#111', backgroundColor: '#f0c14b', padding: { x: 8, y: 6 } })
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.onEndTurn());
-    this.logText = this.add.text(px, 300, '', { fontFamily: 'monospace', fontSize: '12px', color: '#b8b8b8', wordWrap: { width: PANEL_W - 24 } });
+    this.logText = this.add.text(px, 420, '', { fontFamily: 'monospace', fontSize: '12px', color: '#b8b8b8', wordWrap: { width: PANEL_W - 24 } });
     this.tooltip = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '13px', color: '#fff', backgroundColor: '#000c', padding: { x: 6, y: 4 } }).setDepth(10).setVisible(false);
     this.banner = this.add
       .text((this.state.grid.width * TILE) / 2, (this.state.grid.height * TILE) / 2, '', { fontFamily: 'monospace', fontSize: '36px', color: '#fff', backgroundColor: '#000a', padding: { x: 20, y: 12 } })
@@ -263,7 +263,7 @@ export class BattleScene extends Phaser.Scene {
     }
     lines.push('', `Aliens left: ${livingUnits(s, 'alien').length}`, '', 'Click unit: select   Click tile: move', 'Click alien: shoot   Tab: next unit');
     this.panel.setText(lines);
-    this.logText.setText(s.log.slice(-10).map((l) => `${l.text}`));
+    this.logText.setText(s.log.slice(-9).map((l) => `${l.text}`));
 
     if (s.outcome !== 'playing') {
       this.banner.setText(s.outcome === 'won' ? 'AREA SECURED\n\nR to restart' : 'SQUAD LOST\n\nR to restart').setVisible(true);

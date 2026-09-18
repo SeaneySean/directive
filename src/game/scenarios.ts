@@ -36,9 +36,9 @@ export const FARMSTEAD: Scenario = {
   ],
   units: [
     soldier('s1', 'Cole', 1, 14, RIFLE),
-    soldier('s2', 'Diaz', 2, 14, RIFLE),
-    soldier('s3', 'Okafor', 1, 13, SHOTGUN),
-    soldier('s4', 'Reyes', 2, 13, RIFLE),
+    soldier('s2', 'Diaz', 3, 14, RIFLE),
+    soldier('s3', 'Okafor', 2, 13, SHOTGUN),
+    soldier('s4', 'Reyes', 4, 13, RIFLE),
     alien('a1', 'Sectoid', 13, 1, PLASMA),
     alien('a2', 'Sectoid', 14, 2, PLASMA),
     alien('a3', 'Sectoid', 9, 2, PLASMA),
