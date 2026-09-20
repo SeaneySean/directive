@@ -120,7 +120,7 @@ export const REGION_POLYGONS: readonly RegionPolygon[] = [
       { x: 0.889, y: 0.7 }, { x: 0.867, y: 0.656 }, { x: 0.85, y: 0.611 }, { x: 0.833, y: 0.578 },
       { x: 0.817, y: 0.55 },
     ],
-    centroid: { x: 0.86, y: 0.63 },
+    centroid: { x: 0.83, y: 0.63 },
   },
 ];
 

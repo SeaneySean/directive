@@ -145,15 +145,18 @@ export function goldButton(
   options?: { size?: number; fixedWidth?: number; padding?: { x: number; y: number }; enabled?: boolean },
 ): Phaser.GameObjects.Text {
   const enabled = options?.enabled ?? true;
+  const style: Phaser.Types.GameObjects.Text.TextStyle = {
+    fontFamily: FONTS.mono,
+    fontSize: `${options?.size ?? 15}px`,
+    color: enabled ? HEX.black : HEX.faint,
+    backgroundColor: enabled ? HEX.goldBright : HEX.panelMid,
+    padding: options?.padding ?? { x: 8, y: 6 },
+  };
+  // fixedWidth must be omitted (not undefined) or Phaser leaves the text width null
+  // and its input hit-area never matches a click.
+  if (options?.fixedWidth !== undefined) style.fixedWidth = options.fixedWidth;
   const button = scene.add
-    .text(x, y, ` ${label} `, {
-      fontFamily: FONTS.mono,
-      fontSize: `${options?.size ?? 15}px`,
-      color: enabled ? HEX.black : HEX.faint,
-      backgroundColor: enabled ? HEX.goldBright : HEX.panelMid,
-      padding: options?.padding ?? { x: 8, y: 6 },
-      fixedWidth: options?.fixedWidth,
-    })
+    .text(x, y, ` ${label} `, style)
     .setInteractive({ useHandCursor: enabled });
   if (enabled) {
     button.on('pointerover', () => button.setBackgroundColor(HEX.goldHover));

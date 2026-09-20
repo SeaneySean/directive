@@ -65,8 +65,17 @@ export class WorldScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image('world-map', 'assets/art/world-map.jpg');
-    for (const id of ['candidate', 'leak', 'whistleblower', 'miracle', 'summit']) {
-      this.load.image(`event-${id}`, `assets/art/event-${id}.jpg`);
+    // The designer's files are event-<shortname>.jpg, but the event id for the
+    // miracle is 'miracle-at-the-well'; map ids to their image filenames.
+    const eventImages: ReadonlyArray<readonly [string, string]> = [
+      ['candidate', 'candidate'],
+      ['leak', 'leak'],
+      ['whistleblower', 'whistleblower'],
+      ['miracle-at-the-well', 'miracle'],
+      ['summit', 'summit'],
+    ];
+    for (const [id, file] of eventImages) {
+      this.load.image(`event-${id}`, `assets/art/event-${file}.jpg`);
     }
     for (const id of ['area-51', 'atlantis']) {
       this.load.image(`briefing-${id}`, `assets/art/briefing-${id}.jpg`);
