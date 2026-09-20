@@ -140,8 +140,12 @@ export class WorldScene extends Phaser.Scene {
     }
 
     const hit = this.track(this.add.polygon(0, 0, points, 0xffffff, 0.001));
-    hit.setDepth(2);
-    hit.setInteractive({ useHandCursor: true });
+    hit.setDepth(2).setOrigin(0, 0);
+    hit.setInteractive({
+      hitArea: hit.geom,
+      hitAreaCallback: Phaser.Geom.Polygon.Contains,
+      useHandCursor: true,
+    });
     this.attachHover(hit, `${region.name}: ${regionDescription(region)}`);
     if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
       hit.on('pointerdown', () => {
@@ -422,24 +426,26 @@ export class WorldScene extends Phaser.Scene {
   private drawEventModal(): void {
     const event = pendingEvent(this.state);
     if (!event) return;
-    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x05070a, 0.86)).setInteractive();
-    this.track(this.add.rectangle(640, 360, 820, 500, COL.panel, 1)).setStrokeStyle(2, COL.exposure);
+    const DEPTH = 10_000;
+    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x05070a, 0.86)).setInteractive().setDepth(DEPTH);
+    this.track(this.add.rectangle(640, 360, 820, 500, COL.panel, 1)).setStrokeStyle(2, COL.exposure).setDepth(DEPTH + 1);
 
     // Artwork on the left (fallback: gold triangle glyph).
     if (this.textures.exists(`event-${event.id}`)) {
       const image = this.track(this.add.image(320, 360, `event-${event.id}`));
       const scale = Math.min(360 / image.width, 460 / image.height);
-      image.setScale(scale).setOrigin(0.5);
+      image.setScale(scale).setOrigin(0.5).setDepth(DEPTH + 1);
     } else {
       const glyph = this.track(this.add.graphics());
       glyph.fillStyle(COL.gold, 0.9).fillTriangle(320, 300, 220, 430, 420, 430);
+      glyph.setDepth(DEPTH + 1);
     }
 
     const textX = 470;
-    this.track(this.add.text(textX, 128, 'EVENT', textStyle(12, '#c98cf2'))).setDepth(1);
-    this.track(this.add.text(textX, 152, event.name.toUpperCase(), displayStyle(24, HEX.white))).setDepth(1);
-    this.track(this.add.text(textX, 196, event.description, textStyle(14, HEX.gold)).setWordWrapWidth(340)).setDepth(1);
-    this.track(this.add.text(textX, 226, EVENT_CONTEXT[event.id] ?? '', textStyle(13, HEX.textDim)).setWordWrapWidth(340)).setDepth(1);
+    this.track(this.add.text(textX, 128, 'EVENT', textStyle(12, '#c98cf2'))).setDepth(DEPTH + 2);
+    this.track(this.add.text(textX, 152, event.name.toUpperCase(), displayStyle(24, HEX.white))).setDepth(DEPTH + 2);
+    this.track(this.add.text(textX, 196, event.description, textStyle(14, HEX.gold)).setWordWrapWidth(340)).setDepth(DEPTH + 2);
+    this.track(this.add.text(textX, 226, EVENT_CONTEXT[event.id] ?? '', textStyle(13, HEX.textDim)).setWordWrapWidth(340)).setDepth(DEPTH + 2);
     const labels = EVENT_CHOICE_TEXT[event.id] ?? [];
     event.choices.forEach((choice, index) => {
       const available = !choice.available || choice.available(this.state);
@@ -447,7 +453,7 @@ export class WorldScene extends Phaser.Scene {
         backgroundColor: available ? HEX.goldBright : '#202936',
         padding: { x: 8, y: 8 },
         wordWrap: { width: 330 },
-      }))).setDepth(1);
+      }))).setDepth(DEPTH + 3);
       if (available) {
         button.setInteractive({ useHandCursor: true });
         button.on('pointerover', () => button.setBackgroundColor(HEX.goldHover));
