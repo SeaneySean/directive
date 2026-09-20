@@ -98,7 +98,7 @@ export const REGION_POLYGONS: readonly RegionPolygon[] = [
       { x: 0.833, y: 0.194 }, { x: 0.778, y: 0.189 }, { x: 0.722, y: 0.178 }, { x: 0.667, y: 0.183 },
       { x: 0.625, y: 0.211 }, { x: 0.597, y: 0.233 }, { x: 0.583, y: 0.222 },
     ],
-    centroid: { x: 0.78, y: 0.18 },
+    centroid: { x: 0.78, y: 0.205 },
   },
   {
     id: 'asia',

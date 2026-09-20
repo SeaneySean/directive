@@ -158,7 +158,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawMeterCard(region: RegionState, centre: { x: number; y: number }, path: InfluencePath): void {
-    const width = 118;
+    const width = 132;
     const height = 54;
     const held = region.held;
     const card = this.track(this.add.rectangle(centre.x, centre.y, width, height, COL.panel, 0.88));
@@ -168,18 +168,20 @@ export class WorldScene extends Phaser.Scene {
       fontFamily: '"Cinzel", Georgia, serif',
     }))).setOrigin(0.5).setDepth(4);
 
-    const barX = centre.x - width / 2 + 12;
-    const barW = width - 56;
+    const left = centre.x - width / 2;
+    const right = centre.x + width / 2;
+    const labelX = left + 7;   // path letter, left-aligned and fully inside the card
+    const valueX = right - 7;  // meter value, right-aligned
+    const barX = left + 22;
+    const barW = right - 30 - barX;
     (['subvert', 'force', 'enlighten'] as const).forEach((meterPath, index) => {
       const y = centre.y - 7 + index * 11;
       const shown = visibleMeter(this.state, region.meters[meterPath]);
       const g = this.track(this.add.graphics()).setDepth(4);
       g.fillStyle(COL.empty, 1).fillRect(barX, y, barW, 6);
       g.fillStyle(PATH_COLOUR[meterPath], 1).fillRect(barX, y, (barW * shown) / 100, 6);
-      this.track(this.add.text(barX - 9, y - 3, meterPath[0]!.toUpperCase(), textStyle(11, PATH_HEX[meterPath])))
-        .setOrigin(1, 0).setDepth(5);
-      this.track(this.add.text(barX + barW + 4, y - 3, String(Math.round(shown)), textStyle(11, HEX.text)))
-        .setOrigin(0, 0).setDepth(5);
+      this.track(this.add.text(labelX, y - 3, meterPath[0]!.toUpperCase(), textStyle(11, PATH_HEX[meterPath]))).setDepth(5);
+      this.track(this.add.text(valueX, y - 3, String(Math.round(shown)), textStyle(11, HEX.text))).setOrigin(1, 0).setDepth(5);
     });
   }
 
@@ -430,29 +432,36 @@ export class WorldScene extends Phaser.Scene {
     this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.bg, 0.86)).setInteractive().setDepth(DEPTH);
     this.track(this.add.rectangle(640, 360, 820, 500, COL.panel, 1)).setStrokeStyle(2, COL.exposure).setDepth(DEPTH + 1);
 
-    // Artwork on the left (fallback: gold triangle glyph).
+    // Illustration column on the left, with an explicit 25px gutter before the text.
+    const artX = 318;
+    const artW = 236;
+    const artH = 440;
     if (this.textures.exists(`event-${event.id}`)) {
-      const image = this.track(this.add.image(320, 360, `event-${event.id}`));
-      const scale = Math.min(360 / image.width, 460 / image.height);
+      const image = this.track(this.add.image(artX, 360, `event-${event.id}`));
+      const scale = Math.min(artW / image.width, artH / image.height);
       image.setScale(scale).setOrigin(0.5).setDepth(DEPTH + 1);
     } else {
       const glyph = this.track(this.add.graphics());
-      glyph.fillStyle(COL.gold, 0.9).fillTriangle(320, 300, 220, 430, 420, 430);
+      glyph.fillStyle(COL.gold, 0.9).fillTriangle(artX, 250, artX - 95, 430, artX + 95, 430);
       glyph.setDepth(DEPTH + 1);
     }
 
-    const textX = 470;
+    // Text column on the right, clear of the artwork.
+    const textX = 460;
+    const textW = 560;
     this.track(this.add.text(textX, 128, 'EVENT', textStyle(12, HEX.exposureText))).setDepth(DEPTH + 2);
-    this.track(this.add.text(textX, 152, event.name.toUpperCase(), displayStyle(24, HEX.white))).setDepth(DEPTH + 2);
-    this.track(this.add.text(textX, 196, event.description, textStyle(14, HEX.gold)).setWordWrapWidth(340)).setDepth(DEPTH + 2);
-    this.track(this.add.text(textX, 226, EVENT_CONTEXT[event.id] ?? '', textStyle(13, HEX.textDim)).setWordWrapWidth(340)).setDepth(DEPTH + 2);
+    this.track(this.add.text(textX, 150, event.name.toUpperCase(), displayStyle(24, HEX.white))).setDepth(DEPTH + 2);
+    const description = this.track(this.add.text(textX, 196, event.description, textStyle(14, HEX.gold)).setWordWrapWidth(textW)).setDepth(DEPTH + 2);
+    const context = this.track(this.add.text(textX, 202 + description.height, EVENT_CONTEXT[event.id] ?? '', textStyle(13, HEX.textDim)).setWordWrapWidth(textW)).setDepth(DEPTH + 2);
+
     const labels = EVENT_CHOICE_TEXT[event.id] ?? [];
+    const buttonsTop = 202 + description.height + context.height + 18;
     event.choices.forEach((choice, index) => {
       const available = !choice.available || choice.available(this.state);
-      const button = this.track(this.add.text(textX, 300 + index * 58, ` ${(labels[index] ?? choice.label).toUpperCase()} `, textStyle(14, available ? HEX.black : HEX.faint, {
+      const button = this.track(this.add.text(textX, buttonsTop + index * 62, ` ${(labels[index] ?? choice.label).toUpperCase()} `, textStyle(14, available ? HEX.black : HEX.faint, {
         backgroundColor: available ? HEX.goldBright : HEX.panelMid,
         padding: { x: 8, y: 8 },
-        wordWrap: { width: 330 },
+        wordWrap: { width: textW },
       }))).setDepth(DEPTH + 3);
       if (available) {
         button.setInteractive({ useHandCursor: true });

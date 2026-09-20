@@ -24,13 +24,19 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor(COL.blackBg);
-    const splash = this.add.image(WIDTH / 2, HEIGHT / 2, 'title-splash');
-    const scale = Math.max(WIDTH / splash.width, HEIGHT / splash.height);
-    splash.setScale(scale);
-
-    this.add.text(WIDTH / 2, 120, 'ILLUMINATUS', displayStyle(64, HEX.gold, {
-      stroke: HEX.blackPure, strokeThickness: 6,
-    })).setOrigin(0.5).setShadow(0, 3, HEX.blackPure, 8, true, true);
+    // Contain/letterbox the splash so the full image is visible; the artwork already
+    // carries the game's title, so no heading is drawn over it.
+    if (this.textures.exists('title-splash')) {
+      const splash = this.add.image(WIDTH / 2, HEIGHT / 2, 'title-splash');
+      const scale = Math.min(WIDTH / splash.width, HEIGHT / splash.height);
+      splash.setScale(scale);
+    } else {
+      // Missing-image fallback: a heading stands in for the splash art.
+      this.add.text(WIDTH / 2, 200, 'ILLUMINATUS', displayStyle(72, HEX.gold, {
+        stroke: HEX.blackPure, strokeThickness: 6,
+      })).setOrigin(0.5).setShadow(0, 3, HEX.blackPure, 8, true, true);
+      this.add.text(WIDTH / 2, 260, 'WORLD CONTROL', displayStyle(22, HEX.goldDim)).setOrigin(0.5);
+    }
 
     const panelX = 545;
     const panelY = 420;

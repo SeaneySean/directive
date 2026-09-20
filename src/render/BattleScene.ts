@@ -123,14 +123,14 @@ export class BattleScene extends Phaser.Scene {
     this.add.rectangle(PANEL_X, 0, PANEL_W, 720, COL.panelDark, 0.96).setOrigin(0).setDepth(9000);
     this.add.rectangle(PANEL_X, 0, 2, 720, COL.gold, 0.55).setOrigin(0).setDepth(9001);
     this.panel = this.add.text(PANEL_X + 16, 14, '', textStyle(13, HEX.text, { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
-    this.endTurnBtn = goldButton(this, PANEL_X + 20, 470, 'END TURN (E)', () => this.onEndTurn());
+    this.endTurnBtn = goldButton(this, PANEL_X + 20, 555, 'END TURN (E)', () => this.onEndTurn());
     this.endTurnBtn.setDepth(9002);
-    this.hint = this.add.text(PANEL_X + 16, 514, '', textStyle(11, HEX.held, {
+    this.hint = this.add.text(PANEL_X + 16, 600, '', textStyle(11, HEX.held, {
       backgroundColor: HEX.hintBg,
       padding: { x: 6, y: 5 },
       wordWrap: { width: PANEL_W - 44 },
     })).setDepth(9002);
-    this.logText = this.add.text(PANEL_X + 16, 600, '', textStyle(11, HEX.logText, { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
+    this.logText = this.add.text(PANEL_X + 16, 645, '', textStyle(11, HEX.logText, { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
     this.tooltip = this.add.text(0, 0, '', textStyle(12, HEX.white, {
       backgroundColor: HEX.blackTranslucent,
       padding: { x: 6, y: 4 },
@@ -511,7 +511,7 @@ export class BattleScene extends Phaser.Scene {
     lines.push('', `Enemies left: ${livingUnits(state, 'alien').length}`);
     this.panel.setText(lines);
     this.hint.setText(this.hintText()).setVisible(this.hintText() !== '');
-    this.logText.setText(state.log.slice(-8).map((entry) => entry.text));
+    this.logText.setText(state.log.slice(-5).map((entry) => entry.text));
 
     this.drawPortraitCards();
 
@@ -529,7 +529,7 @@ export class BattleScene extends Phaser.Scene {
     const squad = this.state.units.filter((unit) => unit.team === 'squad');
     const cards: Phaser.GameObjects.GameObject[] = [];
     squad.forEach((unit, index) => {
-      const y = 96 + index * 78;
+      const y = 250 + index * 78;
       const card = this.add.rectangle(PANEL_X + PANEL_W / 2, y + 34, PANEL_W - 24, 70, COL.cardBg, 0.95);
       card.setStrokeStyle(1, COL.gold, 0.6).setDepth(9010);
       cards.push(card);
