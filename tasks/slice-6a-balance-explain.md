@@ -1,6 +1,6 @@
 # Slice 6a — make it fair and make it explain itself
 
-Branch: `slice/6a-balance-explain`. Owner: Orpheus. Reviewer: the critic.
+Branch: `slice/6a-balance-explain`. Owner: Orpheus. Reviewer: the critic. Conductor-approved 20 Sep (Athena, 7 revisions applied).
 Depends on slice 5 (merged). Runs before the art pass (6b) and must not block on it.
 
 ## Why
@@ -66,7 +66,8 @@ and the first mission is tuned against a dumb AI squad instead of a person.
 `src/game/scenarios.ts`, `src/game/ai.ts`, `src/game/strategy/research.ts`, `data.ts`,
 new `src/game/strategy/text.ts` and `save.ts`, `scripts/playtest.ts`, new
 `src/render/TitleScene.ts`, `HelpOverlay.ts`, `BriefingScene.ts` (or panels inside
-WorldScene), edits to `WorldScene.ts` and `BattleScene.ts`, `src/main.ts`.
+`WorldScene`), a small shared scene-glue key module, edits to `WorldScene.ts`,
+`BattleScene.ts`, `EndingScene.ts`, and `src/main.ts`.
 
 ## Out of scope
 
