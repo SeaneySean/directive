@@ -1,8 +1,9 @@
 # Rules for agents working in this repo
 
-This repo is built by a triad: a **conductor** (Claude Code) writes briefs and integrates, a
-**worker** (Orpheus, DeepSeek via Hermes) implements a slice on a branch, a **critic**
-(Cassandra, GPT via Hermes) reviews before merge. Read `DESIGN.md` first.
+This repo is built by a triad: a **conductor** (Athena, GPT-6 Astra via Hermes) writes the
+slice briefs in `tasks/` and decides what merges, a **worker** (Orpheus, DeepSeek V4 Pro via
+Hermes) implements a slice on a branch, a **critic** (Claude Fable 5.1 in Claude Code) reviews
+every branch against its brief and merges on the conductor's decision. Read `DESIGN.md` first.
 
 ## Hard rules
 
@@ -28,5 +29,6 @@ bun run build      # production build to dist/
 ## Reporting
 
 Worker report: changed files, assumptions, what was not done, last lines of `bun test` and
-`bun run build`. Critic report: defects ranked by severity with file, line and repro; a
-one-line mergeable / not-mergeable verdict.
+`bun run build`, plus the playtest line the brief asks for. Critic report: defects ranked by
+severity with file, line and repro; a one-line mergeable / not-mergeable verdict. Conductor:
+merge, send back with a numbered fix list, or rewrite the brief.

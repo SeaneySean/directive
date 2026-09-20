@@ -1,6 +1,6 @@
-# Slice 2 — isometric renderer
+# Slice 3 — isometric renderer
 
-Branch: `slice/2-isometric`. Owner: Orpheus. Reviewer: Cassandra.
+Branch: `slice/3-isometric`. Owner: Orpheus. Reviewer: the critic. Depends on slice 2 being merged (WorldScene stays untouched by this slice).
 
 ## Goal
 
@@ -25,7 +25,7 @@ Kenney CC0 tiles, without changing any rule in `src/game/`.
 ## Files expected to change
 
 `src/render/BattleScene.ts` (or split into `src/render/iso.ts` for projection helpers plus the
-scene), `src/main.ts` for canvas size, `public/assets/**`, `public/assets/CREDITS.md`.
+scene), `src/main.ts` for canvas size only, `public/assets/**`, `public/assets/CREDITS.md`.
 
 ## Out of scope
 

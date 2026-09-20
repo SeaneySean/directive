@@ -1,6 +1,8 @@
 # Illuminatus
 
-Turn-based squad tactics in the browser, in the spirit of UFO: Enemy Unknown. Built with AI for
+A conspiracy strategy game in the browser. Take the world region by region, by subversion,
+force, or enlightenment, research from cybernetics to mythology, and raid Area 51 and Atlantis
+in turn-based isometric squad missions. Syndicate meets UFO: Enemy Unknown. Built with AI for
 the September Comp.
 
 **Play:** https://seaneysean.github.io/directive/
