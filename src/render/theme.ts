@@ -133,7 +133,7 @@ export function goldButton(
 export function ensureScanlines(scene: Phaser.Scene): string {
   const key = '__scanlines';
   if (scene.textures.exists(key)) return key;
-  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  const g = scene.add.graphics();
   g.fillStyle(0x000000, 1);
   g.fillRect(0, 1, 2, 1);
   g.generateTexture(key, 2, 2);

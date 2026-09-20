@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   canAct,
   createGame,
+  distance,
   endTurn,
   FARMSTEAD,
   livingUnits,
@@ -25,6 +26,7 @@ import type { CampaignState } from '../game/strategy/types.ts';
 import { MISSION_TEXT } from '../game/strategy/text.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
 import { gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
+import { COL, HEX, displayStyle, goldButton, textStyle } from './theme.ts';
 
 export { TILE_H, TILE_W } from './iso.ts';
 export const PANEL_W = 280;
@@ -33,18 +35,38 @@ const BOARD_ORIGIN = { x: 490, y: 78 };
 const PANEL_X = 1000;
 const ASSET_PATH = 'assets/';
 
-const COLORS = {
-  floor: 0x596473,
-  floorAlt: 0x4d5867,
-  squad: 0x4fa3ff,
-  alien: 0xe05a5a,
-  selected: 0xffffff,
-  reach: 0x56c982,
-  hp: 0x7ee08a,
-  hpBg: 0x171a20,
+const DIM_DISTANCE = 8; // terrain dims beyond this Chebyshev distance from every squad unit
+const DIM_TINT = 0x666666; // 40% brightness
+
+interface TileSpec {
+  floor: string;
+  wall: string;
+  cover: string;
+  /** origin.y for the wall block so its top face centres on the tile diamond. */
+  wallOriginY: number;
+  wallHeight: number;
+  coverWidth: number;
+  coverHeight: number;
+  coverOriginY: number;
+  watery: boolean;
+}
+
+const HANGAR_TILES: TileSpec = {
+  floor: 'hangar-floor', wall: 'hangar-wall', cover: 'crate',
+  wallOriginY: 0.225, wallHeight: 67, coverWidth: 46, coverHeight: 50, coverOriginY: 0.22, watery: false,
+};
+const ATLANTIS_TILES: TileSpec = {
+  floor: 'atlantis-floor', wall: 'atlantis-wall', cover: 'pillar',
+  wallOriginY: 0.227, wallHeight: 66, coverWidth: 40, coverHeight: 118, coverOriginY: 0.18, watery: true,
 };
 
-/** Isometric tactical renderer. All rules remain in src/game. */
+const UNIT_SPRITES = {
+  soldier: { key: 'unit-soldier', feet: 0.988 },
+  guard: { key: 'unit-guard', feet: 0.992 },
+  guardian: { key: 'unit-guardian', feet: 0.977 },
+  sectoid: { key: 'unit-sectoid', feet: 0.945 },
+} as const;
+
 export class BattleScene extends Phaser.Scene {
   private state!: GameState;
   private scenario: Scenario = FARMSTEAD;
@@ -59,6 +81,7 @@ export class BattleScene extends Phaser.Scene {
   private reach: Reach | null = null;
   private busy = false;
   private returning = false;
+  private tiles!: TileSpec;
 
   constructor() {
     super('battle');
@@ -70,9 +93,22 @@ export class BattleScene extends Phaser.Scene {
   }
 
   preload(): void {
+    // Kenney miniature tiles (crumbs of the packs we actually use).
+    for (const key of ['floor-hangar', 'wall-hangar', 'crate', 'floor-atlantis', 'wall-atlantis', 'pillar']) {
+      this.load.image(key, `${ASSET_PATH}battle/${key}.png`);
+    }
+    // Legacy fallbacks so a failed load never blanks a tile.
     this.load.image('iso-floor', `${ASSET_PATH}platformerTile_35.png`);
     this.load.image('iso-wall', `${ASSET_PATH}platformerTile_30.png`);
     this.load.image('iso-cover', `${ASSET_PATH}platformerTile_22.png`);
+    // Unit sprites (512px RGBA, facing down-right).
+    for (const [id, sprite] of Object.entries(UNIT_SPRITES)) {
+      this.load.image(sprite.key, `${ASSET_PATH}art/units/${id}.png`);
+    }
+    // Agent portraits.
+    for (const name of ['cole', 'diaz', 'okafor', 'reyes']) {
+      this.load.image(`portrait-${name}`, `${ASSET_PATH}art/portraits/${name}.jpg`);
+    }
   }
 
   create(): void {
@@ -83,56 +119,25 @@ export class BattleScene extends Phaser.Scene {
       this.scenario = FARMSTEAD;
     }
     this.state = createGame(this.scenario, Date.now() % 100000);
+    this.tiles = this.missionId === 'atlantis' ? ATLANTIS_TILES : HANGAR_TILES;
 
     this.add.rectangle(PANEL_X, 0, PANEL_W, 720, 0x090d13, 0.96).setOrigin(0).setDepth(9000);
-    this.add.rectangle(PANEL_X, 0, 2, 720, 0xf0c14b, 0.55).setOrigin(0).setDepth(9001);
-    this.panel = this.add.text(PANEL_X + 16, 14, '', {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: '#e6e6e6',
-      wordWrap: { width: PANEL_W - 32 },
-    }).setDepth(9002);
-    this.endTurnBtn = this.add
-      .text(PANEL_X + 16, 372, ' END TURN (E) ', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#111',
-        backgroundColor: '#f0c14b',
-        padding: { x: 8, y: 6 },
-      })
-      .setDepth(9002)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.onEndTurn());
-    this.hint = this.add.text(PANEL_X + 16, 412, '', {
-      fontFamily: 'monospace',
-      fontSize: '12px',
-      color: '#fff1bd',
+    this.add.rectangle(PANEL_X, 0, 2, 720, COL.gold, 0.55).setOrigin(0).setDepth(9001);
+    this.panel = this.add.text(PANEL_X + 16, 14, '', textStyle(13, HEX.text, { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
+    this.endTurnBtn = goldButton(this, PANEL_X + 20, 470, 'END TURN (E)', () => this.onEndTurn());
+    this.endTurnBtn.setDepth(9002);
+    this.hint = this.add.text(PANEL_X + 16, 514, '', textStyle(11, HEX.held, {
       backgroundColor: '#2b2413',
       padding: { x: 6, y: 5 },
       wordWrap: { width: PANEL_W - 44 },
-    }).setDepth(9002);
-    this.logText = this.add.text(PANEL_X + 16, 470, '', {
-      fontFamily: 'monospace',
-      fontSize: '12px',
-      color: '#b8b8b8',
-      wordWrap: { width: PANEL_W - 32 },
-    }).setDepth(9002);
-    this.tooltip = this.add.text(0, 0, '', {
-      fontFamily: 'monospace',
-      fontSize: '13px',
-      color: '#fff',
+    })).setDepth(9002);
+    this.logText = this.add.text(PANEL_X + 16, 600, '', textStyle(11, '#8f9aa8', { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
+    this.tooltip = this.add.text(0, 0, '', textStyle(12, HEX.white, {
       backgroundColor: '#000e',
       padding: { x: 6, y: 4 },
-    }).setDepth(10000).setVisible(false);
+    })).setDepth(10000).setVisible(false);
     this.banner = this.add
-      .text(BOARD_ORIGIN.x, 326, '', {
-        align: 'center',
-        fontFamily: 'monospace',
-        fontSize: '36px',
-        color: '#fff',
-        backgroundColor: '#000c',
-        padding: { x: 20, y: 12 },
-      })
+      .text(BOARD_ORIGIN.x, 326, '', displayStyle(30, HEX.white, { backgroundColor: '#000c', padding: { x: 20, y: 12 } }))
       .setOrigin(0.5)
       .setDepth(10001)
       .setVisible(false);
@@ -163,7 +168,7 @@ export class BattleScene extends Phaser.Scene {
     const candidates = this.state.units
       .filter((unit) => unit.alive)
       .map((unit) => ({ unit, screen: gridToScreen(unit.pos, BOARD_ORIGIN) }))
-      .filter(({ screen }) => Math.abs(p.x - screen.x) <= 18 && p.y >= screen.y - 48 && p.y <= screen.y + 10)
+      .filter(({ screen }) => Math.abs(p.x - screen.x) <= 18 && p.y >= screen.y - 64 && p.y <= screen.y + 10)
       .sort((a, b) => tileDepth(b.unit.pos) - tileDepth(a.unit.pos));
     return candidates[0]?.unit ?? null;
   }
@@ -203,13 +208,12 @@ export class BattleScene extends Phaser.Scene {
       `Survivors: ${squad.length - fallen.length} of ${squad.length}`,
     ].filter((line, index) => line !== '' || index === 1);
     this.banner.setVisible(false);
-    this.add.rectangle(BOARD_ORIGIN.x, 360, 620, 330, 0x090d13, 0.97).setStrokeStyle(2, 0xd4af37).setDepth(10010);
+    this.add.rectangle(BOARD_ORIGIN.x, 360, 620, 330, 0x090d13, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
     this.add.text(BOARD_ORIGIN.x, 300, lines, {
-      fontFamily: 'monospace', fontSize: '17px', color: result === 'won' ? '#f6e6a8' : '#e7edf5', align: 'center', lineSpacing: 8,
+      fontFamily: '"IBM Plex Mono", monospace', fontSize: '17px', color: result === 'won' ? HEX.goldPale : HEX.text, align: 'center', lineSpacing: 8,
     }).setOrigin(0.5).setDepth(10011);
-    this.add.text(BOARD_ORIGIN.x, 470, ' RETURN TO WORLD ', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37', padding: { x: 10, y: 7 },
-    }).setOrigin(0.5).setDepth(10011).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('world'));
+    goldButton(this, BOARD_ORIGIN.x - 80, 470, 'RETURN TO WORLD', () => this.scene.start('world'))
+      .setOrigin(0.5).setDepth(10011);
   }
 
   private hintText(): string {
@@ -337,33 +341,50 @@ export class BattleScene extends Phaser.Scene {
     this.boardObjects = [];
   }
 
+  private textureFor(preferred: string, fallback: string): string {
+    return this.textures.exists(preferred) ? preferred : (this.textures.exists(fallback) ? fallback : preferred);
+  }
+
+  private isDimmed(point: Vec): boolean {
+    let minDistance = Infinity;
+    for (const unit of this.state.units) {
+      if (unit.team !== 'squad' || !unit.alive) continue;
+      const d = distance(point, unit.pos);
+      if (d < minDistance) minDistance = d;
+    }
+    return minDistance > DIM_DISTANCE;
+  }
+
   private redraw(): void {
     this.clearBoard();
     const { grid } = this.state;
+
+    // Decorative water outside the playable grid (Atlantis only).
+    if (this.tiles.watery) {
+      const water = this.track(this.add.graphics());
+      water.fillStyle(0x0a2b33, 1).fillRoundedRect(205, 4, 565, 570, 40).setDepth(-10);
+      water.fillStyle(0x0e3a44, 1).fillRoundedRect(225, 20, 525, 540, 36).setDepth(-10);
+    }
 
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
         const point = { x, y };
         const centre = gridToScreen(point, BOARD_ORIGIN);
-        const floor = this.track(this.add.image(centre.x, centre.y, 'iso-floor'));
-        floor.setCrop(0, 0, 111, 64).setDisplaySize(TILE_W, TILE_H).setTint((x + y) % 2 ? COLORS.floorAlt : COLORS.floor).setDepth(0);
+        const dimmed = this.isDimmed(point);
+        const floor = this.track(this.add.image(centre.x, centre.y, this.textureFor(this.tiles.floor, 'iso-floor')));
+        floor.setDisplaySize(TILE_W, TILE_H);
+        floor.setTint(dimmed ? DIM_TINT : (x + y) % 2 ? 0x4d5867 : 0x596473);
+        floor.setDepth(0);
       }
     }
 
     if (this.state.objective) {
-      const centre = gridToScreen(this.state.objective.tile, BOARD_ORIGIN);
-      const objective = this.track(this.add.graphics());
-      objective.fillStyle(0xd4af37, 0.75).fillPoints([
-        new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2 + 3),
-        new Phaser.Geom.Point(centre.x + TILE_W / 2 - 5, centre.y),
-        new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2 - 3),
-        new Phaser.Geom.Point(centre.x - TILE_W / 2 + 5, centre.y),
-      ], true).setDepth(1);
+      this.drawObjectiveBeacon(this.state.objective.tile);
     }
 
     if (this.reach) {
       const highlight = this.track(this.add.graphics());
-      highlight.fillStyle(COLORS.reach, 0.52).setDepth(1);
+      highlight.fillStyle(COL.reach, 0.52).setDepth(2);
       for (const node of this.reach.values()) {
         if (node.dist === 0) continue;
         const centre = gridToScreen(node.pos, BOARD_ORIGIN);
@@ -386,15 +407,31 @@ export class BattleScene extends Phaser.Scene {
         const kind = tileAt(grid, point);
         if (kind === 'floor') continue;
         const centre = gridToScreen(point, BOARD_ORIGIN);
-        const texture = kind === 'wall' ? 'iso-wall' : 'iso-cover';
-        const width = kind === 'wall' ? TILE_W : 46;
-        const height = kind === 'wall' ? (128 * TILE_W) / 111 : (128 * width) / 111;
-        const obstacle = this.track(this.add.image(centre.x, centre.y, texture));
-        obstacle.setDisplaySize(width, height).setOrigin(0.5, 0.25).setDepth(tileDepth(point, 8));
+        const dimmed = this.isDimmed(point);
+        this.drawObstacle(kind, centre, point, dimmed);
       }
     }
 
     this.drawPanel();
+  }
+
+  private drawObstacle(kind: 'wall' | 'cover', centre: { x: number; y: number }, point: Vec, dimmed: boolean): void {
+    const isWall = kind === 'wall';
+    const texture = this.textureFor(isWall ? this.tiles.wall : this.tiles.cover, isWall ? 'iso-wall' : 'iso-cover');
+    const width = isWall ? TILE_W : this.tiles.coverWidth;
+    const height = isWall ? this.tiles.wallHeight : this.tiles.coverHeight;
+    const originY = isWall ? this.tiles.wallOriginY : this.tiles.coverOriginY;
+    const obstacle = this.track(this.add.image(centre.x, centre.y, texture));
+    obstacle.setDisplaySize(width, height).setOrigin(0.5, originY).setDepth(tileDepth(point, 8));
+    if (dimmed) obstacle.setTint(DIM_TINT);
+  }
+
+  private spriteFor(unit: Unit): { key: string; feet: number } {
+    if (unit.team === 'squad') return UNIT_SPRITES.soldier;
+    const name = unit.name.toLowerCase();
+    if (name.includes('guardian')) return UNIT_SPRITES.guardian;
+    if (name.includes('guard')) return UNIT_SPRITES.guard;
+    return UNIT_SPRITES.sectoid;
   }
 
   private drawUnit(unit: Unit): void {
@@ -402,36 +439,59 @@ export class BattleScene extends Phaser.Scene {
     const container = this.track(this.add.container(centre.x, centre.y));
     container.setDepth(tileDepth(unit.pos, 5));
 
+    // Base ring: coloured for the squad, red for enemies.
+    const ring = this.add.graphics();
+    ring.lineStyle(3, unit.team === 'squad' ? COL.squad : COL.alien, 0.9);
+    ring.strokeEllipse(0, 0, TILE_W - 4, TILE_H + 8);
+
     const shape = this.add.graphics();
-    shape.fillStyle(0x000000, 0.45).fillEllipse(0, 6, 30, 11);
+    shape.fillStyle(0x000000, 0.45).fillEllipse(0, 5, 26, 10);
     if (unit.id === this.state.selectedId) {
-      shape.lineStyle(2, COLORS.selected, 1).strokePoints([
+      shape.lineStyle(2, 0xffffff, 1).strokePoints([
         new Phaser.Geom.Point(0, -TILE_H / 2 + 1),
         new Phaser.Geom.Point(TILE_W / 2 - 4, 0),
         new Phaser.Geom.Point(0, TILE_H / 2 - 1),
         new Phaser.Geom.Point(-TILE_W / 2 + 4, 0),
       ], true);
     }
-    shape.fillStyle(unit.team === 'squad' ? COLORS.squad : COLORS.alien, 1);
-    if (unit.team === 'squad') shape.fillRoundedRect(-12, -39, 24, 37, 5);
-    else shape.fillTriangle(0, -43, -15, -3, 15, -3);
+
+    const sprite = this.spriteFor(unit);
+    const spriteImage = this.textures.exists(sprite.key) ? this.add.image(0, 0, sprite.key) : null;
+    if (spriteImage) {
+      const height = TILE_W * 1.6; // ~96px, about 1.6 tiles tall
+      spriteImage.setDisplaySize(height, height); // square source, uniform scale
+      spriteImage.setOrigin(0.5, sprite.feet);
+    } else {
+      // Fallback glyph: rounded body or triangle.
+      shape.fillStyle(unit.team === 'squad' ? COL.squad : COL.alien, 1);
+      if (unit.team === 'squad') shape.fillRoundedRect(-12, -39, 24, 37, 5);
+      else shape.fillTriangle(0, -43, -15, -3, 15, -3);
+    }
 
     const hpWidth = 28;
-    shape.fillStyle(COLORS.hpBg, 1).fillRect(-hpWidth / 2, -48, hpWidth, 4);
-    shape.fillStyle(COLORS.hp, 1).fillRect(-hpWidth / 2, -48, (hpWidth * unit.hp) / unit.maxHp, 4);
+    shape.fillStyle(0x171a20, 1).fillRect(-hpWidth / 2, -48, hpWidth, 4);
+    shape.fillStyle(0x7ee08a, 1).fillRect(-hpWidth / 2, -48, (hpWidth * unit.hp) / unit.maxHp, 4);
     if (unit.team === 'squad') {
       for (let i = 0; i < unit.maxAp; i++) {
         shape.fillStyle(i < unit.ap ? 0xfff2a8 : 0x555555, 1).fillCircle(-5 + i * 10, -43, 2.5);
       }
     }
 
-    const label = this.add.text(0, -21, unit.name.slice(0, 2).toUpperCase(), {
-      fontFamily: 'monospace',
-      fontSize: '10px',
-      color: '#071018',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    container.add([shape, label]);
+    container.add([ring, shape]);
+    if (spriteImage) container.add(spriteImage);
+  }
+
+  private drawObjectiveBeacon(tile: Vec): void {
+    const centre = gridToScreen(tile, BOARD_ORIGIN);
+    const beacon = this.track(this.add.graphics());
+    beacon.fillStyle(COL.gold, 0.9).fillPoints([
+      new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2 - 4),
+      new Phaser.Geom.Point(centre.x + TILE_W / 2 - 4, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2 - 4),
+      new Phaser.Geom.Point(centre.x - TILE_W / 2 + 4, centre.y),
+    ], true);
+    beacon.setDepth(3);
+    this.tweens.add({ targets: beacon, alpha: { from: 0.35, to: 1 }, duration: 700, yoyo: true, repeat: -1 });
   }
 
   private drawPanel(): void {
@@ -447,17 +507,14 @@ export class BattleScene extends Phaser.Scene {
         `  HP ${sel.hp}/${sel.maxHp}   AP ${sel.ap}/${sel.maxAp}`,
         `  ${sel.weapon.name}  rng ${sel.weapon.range}`,
         `  acc ${sel.weapon.accuracy}%  dmg ${sel.weapon.damage}`,
-        '',
       );
-    }
-    lines.push('Squad:');
-    for (const unit of state.units.filter((candidate) => candidate.team === 'squad')) {
-      lines.push(`  ${unit.alive ? '' : 'x '}${unit.name.padEnd(7)} HP ${String(unit.hp).padStart(2)}  AP ${unit.ap}`);
     }
     lines.push('', `Enemies left: ${livingUnits(state, 'alien').length}`);
     this.panel.setText(lines);
     this.hint.setText(this.hintText()).setVisible(this.hintText() !== '');
-    this.logText.setText(state.log.slice(-9).map((entry) => entry.text));
+    this.logText.setText(state.log.slice(-8).map((entry) => entry.text));
+
+    this.drawPortraitCards();
 
     if (state.outcome !== 'playing') {
       const suffix = this.missionId ? '' : '\n\nR to restart';
@@ -467,5 +524,50 @@ export class BattleScene extends Phaser.Scene {
       this.banner.setVisible(false);
       this.endTurnBtn.setVisible(state.turn === 'squad');
     }
+  }
+
+  private drawPortraitCards(): void {
+    const squad = this.state.units.filter((unit) => unit.team === 'squad');
+    const cards: Phaser.GameObjects.GameObject[] = [];
+    squad.forEach((unit, index) => {
+      const y = 96 + index * 78;
+      const card = this.add.rectangle(PANEL_X + PANEL_W / 2, y + 34, PANEL_W - 24, 70, 0x0b1018, 0.95);
+      card.setStrokeStyle(1, COL.gold, 0.6).setDepth(9010);
+      cards.push(card);
+
+      const portraitKey = `portrait-${unit.name.toLowerCase()}`;
+      if (this.textures.exists(portraitKey)) {
+        const portrait = this.add.image(PANEL_X + 20, y + 35, portraitKey);
+        portrait.setDisplaySize(58, 58).setDepth(9011);
+        cards.push(portrait);
+        const frame = this.add.rectangle(PANEL_X + 20, y + 35, 60, 60);
+        frame.setStrokeStyle(1, COL.gold, 0.85).setDepth(9012);
+        cards.push(frame);
+      } else {
+        // Fallback: initials on a gold disc.
+        const disc = this.add.circle(PANEL_X + 20, y + 35, 29, COL.goldDim, 1).setDepth(9011);
+        const initials = unit.name.slice(0, 2).toUpperCase();
+        const label = this.add.text(PANEL_X + 20, y + 35, initials, textStyle(16, HEX.black, { fontStyle: 'bold' })).setOrigin(0.5).setDepth(9012);
+        cards.push(disc, label);
+      }
+
+      const name = this.add.text(PANEL_X + 56, y + 8, unit.name.toUpperCase(), textStyle(12, unit.alive ? HEX.text : HEX.faint)).setDepth(9011);
+      cards.push(name);
+      const status = this.add.text(PANEL_X + 220, y + 8, unit.alive ? '' : 'KIA', textStyle(11, HEX.danger)).setOrigin(1, 0).setDepth(9011);
+      cards.push(status);
+
+      // HP bar
+      const hpBg = this.add.rectangle(PANEL_X + 56, y + 32, 160, 8, 0x171a20, 1).setOrigin(0, 0.5).setDepth(9011);
+      const hp = this.add.rectangle(PANEL_X + 56, y + 32, (160 * unit.hp) / unit.maxHp, 8, 0x7ee08a, 1).setOrigin(0, 0.5).setDepth(9012);
+      const hpLabel = this.add.text(PANEL_X + 222, y + 32, String(unit.hp), textStyle(11, HEX.text)).setOrigin(1, 0.5).setDepth(9012);
+      cards.push(hpBg, hp, hpLabel);
+
+      // AP bar
+      const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 160, 6, 0x171a20, 1).setOrigin(0, 0.5).setDepth(9011);
+      const ap = this.add.rectangle(PANEL_X + 56, y + 48, (160 * unit.ap) / unit.maxAp, 6, 0xf0c14b, 1).setOrigin(0, 0.5).setDepth(9012);
+      const apLabel = this.add.text(PANEL_X + 222, y + 48, `${unit.ap} AP`, textStyle(10, HEX.goldPale)).setOrigin(1, 0.5).setDepth(9012);
+      cards.push(apBg, ap, apLabel);
+    });
+    this.boardObjects.push(...cards);
   }
 }
