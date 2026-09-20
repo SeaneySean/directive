@@ -14,9 +14,11 @@ Last updated: 20 Sep 2026, 16:40. Deadline: 30 Sep 2026.
 
 ## What I need from Sean
 
-1. **Playtest the hangar on master** (the redrawn map) and say whether it is fair now:
-   `cd ~/games/directive && git checkout master && git pull && bun run dev`
-   Reach the gold tile under the craft and hold it two turns, or kill the three guards.
+1. **Playtest the hangar** (the redrawn map) and say whether it is fair now. Use the play copy,
+   never the main folder while a worker run is live:
+   `cd ~/games/illuminatus-play && git checkout --detach origin/master && bun run dev`
+   (run `git fetch` first to pick up anything new). Reach the gold tile under the craft and
+   hold it two turns, or kill the three guards.
 2. Still outstanding from earlier: `gh auth refresh -h github.com -s workflow` so the Pages
    deploy can go live; the judges need a link.
 
