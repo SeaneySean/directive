@@ -19,31 +19,30 @@ import {
   type Unit,
   type Vec,
 } from '../game/index.ts';
+import { gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
 
-export const TILE = 40;
+export { TILE_H, TILE_W } from './iso.ts';
 export const PANEL_W = 280;
 
+const BOARD_ORIGIN = { x: 490, y: 78 };
+const PANEL_X = 1000;
+const ASSET_PATH = 'assets/';
+
 const COLORS = {
-  floor: 0x2b3038,
-  floorAlt: 0x2f353e,
-  wall: 0x11141a,
-  cover: 0x6b5a3a,
+  floor: 0x596473,
+  floorAlt: 0x4d5867,
   squad: 0x4fa3ff,
   alien: 0xe05a5a,
   selected: 0xffffff,
-  reach: 0x3d6b4f,
+  reach: 0x56c982,
   hp: 0x7ee08a,
-  hpBg: 0x222222,
+  hpBg: 0x171a20,
 };
 
-/**
- * Slice 1 renderer: flat top-down grid. Everything visual lives here; the
- * game rules are in src/game and this scene only calls into them.
- */
+/** Isometric tactical renderer. All rules remain in src/game. */
 export class BattleScene extends Phaser.Scene {
   private state!: GameState;
-  private gfx!: Phaser.GameObjects.Graphics;
-  private labels: Phaser.GameObjects.Text[] = [];
+  private boardObjects: Phaser.GameObjects.GameObject[] = [];
   private panel!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
   private tooltip!: Phaser.GameObjects.Text;
@@ -56,22 +55,58 @@ export class BattleScene extends Phaser.Scene {
     super('battle');
   }
 
+  preload(): void {
+    this.load.image('iso-floor', `${ASSET_PATH}platformerTile_35.png`);
+    this.load.image('iso-wall', `${ASSET_PATH}platformerTile_30.png`);
+    this.load.image('iso-cover', `${ASSET_PATH}platformerTile_22.png`);
+  }
+
   create(): void {
     this.state = createGame(FARMSTEAD, Date.now() % 100000);
-    this.gfx = this.add.graphics();
-    const px = this.state.grid.width * TILE + 16;
 
-    this.panel = this.add.text(px, 12, '', { fontFamily: 'monospace', fontSize: '14px', color: '#e6e6e6', wordWrap: { width: PANEL_W - 24 } });
+    this.add.rectangle(PANEL_X, 0, PANEL_W, 720, 0x090d13, 0.96).setOrigin(0).setDepth(9000);
+    this.add.rectangle(PANEL_X, 0, 2, 720, 0xf0c14b, 0.55).setOrigin(0).setDepth(9001);
+    this.panel = this.add.text(PANEL_X + 16, 14, '', {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#e6e6e6',
+      wordWrap: { width: PANEL_W - 32 },
+    }).setDepth(9002);
     this.endTurnBtn = this.add
-      .text(px, 372, ' END TURN (E) ', { fontFamily: 'monospace', fontSize: '16px', color: '#111', backgroundColor: '#f0c14b', padding: { x: 8, y: 6 } })
+      .text(PANEL_X + 16, 372, ' END TURN (E) ', {
+        fontFamily: 'monospace',
+        fontSize: '16px',
+        color: '#111',
+        backgroundColor: '#f0c14b',
+        padding: { x: 8, y: 6 },
+      })
+      .setDepth(9002)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.onEndTurn());
-    this.logText = this.add.text(px, 420, '', { fontFamily: 'monospace', fontSize: '12px', color: '#b8b8b8', wordWrap: { width: PANEL_W - 24 } });
-    this.tooltip = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '13px', color: '#fff', backgroundColor: '#000c', padding: { x: 6, y: 4 } }).setDepth(10).setVisible(false);
+    this.logText = this.add.text(PANEL_X + 16, 420, '', {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      color: '#b8b8b8',
+      wordWrap: { width: PANEL_W - 32 },
+    }).setDepth(9002);
+    this.tooltip = this.add.text(0, 0, '', {
+      fontFamily: 'monospace',
+      fontSize: '13px',
+      color: '#fff',
+      backgroundColor: '#000e',
+      padding: { x: 6, y: 4 },
+    }).setDepth(10000).setVisible(false);
     this.banner = this.add
-      .text((this.state.grid.width * TILE) / 2, (this.state.grid.height * TILE) / 2, '', { fontFamily: 'monospace', fontSize: '36px', color: '#fff', backgroundColor: '#000a', padding: { x: 20, y: 12 } })
+      .text(BOARD_ORIGIN.x, 326, '', {
+        align: 'center',
+        fontFamily: 'monospace',
+        fontSize: '36px',
+        color: '#fff',
+        backgroundColor: '#000c',
+        padding: { x: 20, y: 12 },
+      })
       .setOrigin(0.5)
-      .setDepth(20)
+      .setDepth(10001)
       .setVisible(false);
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onHover(p));
@@ -90,10 +125,19 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private tileFromPointer(p: Phaser.Input.Pointer): Vec | null {
-    const x = Math.floor(p.x / TILE);
-    const y = Math.floor(p.y / TILE);
-    if (x < 0 || y < 0 || x >= this.state.grid.width || y >= this.state.grid.height) return null;
-    return { x, y };
+    if (p.x >= PANEL_X) return null;
+    const tile = screenToGrid({ x: p.x, y: p.y }, BOARD_ORIGIN);
+    if (!tile || tile.x < 0 || tile.y < 0 || tile.x >= this.state.grid.width || tile.y >= this.state.grid.height) return null;
+    return tile;
+  }
+
+  private unitFromPointer(p: Phaser.Input.Pointer): Unit | null {
+    const candidates = this.state.units
+      .filter((unit) => unit.alive)
+      .map((unit) => ({ unit, screen: gridToScreen(unit.pos, BOARD_ORIGIN) }))
+      .filter(({ screen }) => Math.abs(p.x - screen.x) <= 18 && p.y >= screen.y - 48 && p.y <= screen.y + 10)
+      .sort((a, b) => tileDepth(b.unit.pos) - tileDepth(a.unit.pos));
+    return candidates[0]?.unit ?? null;
   }
 
   private setState(next: GameState): void {
@@ -104,7 +148,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private autoSelect(): void {
-    const ready = livingUnits(this.state, 'squad').find((u) => u.ap > 0);
+    const ready = livingUnits(this.state, 'squad').find((unit) => unit.ap > 0);
     this.setState(selectUnit(this.state, ready ? ready.id : null));
   }
 
@@ -112,22 +156,26 @@ export class BattleScene extends Phaser.Scene {
     if (this.state.turn !== 'squad' || this.busy) return;
     const squad = livingUnits(this.state, 'squad');
     if (!squad.length) return;
-    const i = squad.findIndex((u) => u.id === this.state.selectedId);
-    const next = squad[(i + 1) % squad.length]!;
+    const index = squad.findIndex((unit) => unit.id === this.state.selectedId);
+    const next = squad[(index + 1) % squad.length]!;
     this.setState(selectUnit(this.state, next.id));
   }
 
   private onHover(p: Phaser.Input.Pointer): void {
-    const tile = this.tileFromPointer(p);
     const sel = selectedUnit(this.state);
-    if (!tile || !sel || this.state.turn !== 'squad') return this.tooltip.setVisible(false) && undefined;
-    const target = unitAt(this.state, tile);
-    if (target && target.team === 'alien') {
+    if (!sel || this.state.turn !== 'squad') {
+      this.tooltip.setVisible(false);
+      return;
+    }
+    const hoveredUnit = this.unitFromPointer(p);
+    const tile = this.tileFromPointer(p);
+    const target = hoveredUnit ?? (tile ? unitAt(this.state, tile) : null);
+    if (target?.team === 'alien') {
       const preview = previewShot(this.state.grid, sel, target);
       const text = preview
         ? `${target.name}  HP ${target.hp}/${target.maxHp}\nHit ${preview.chance}%  ${preview.cover ? 'in cover' : 'exposed'}  range ${preview.distance}`
         : `${target.name}  HP ${target.hp}/${target.maxHp}\nNo shot`;
-      this.tooltip.setText(text).setPosition(p.x + 14, p.y + 14).setVisible(true);
+      this.tooltip.setText(text).setPosition(Math.min(p.x + 14, PANEL_X - 230), p.y + 14).setVisible(true);
       return;
     }
     this.tooltip.setVisible(false);
@@ -135,17 +183,18 @@ export class BattleScene extends Phaser.Scene {
 
   private onClick(p: Phaser.Input.Pointer): void {
     if (this.busy || this.state.outcome !== 'playing' || this.state.turn !== 'squad') return;
-    const tile = this.tileFromPointer(p);
+    const pointerUnit = this.unitFromPointer(p);
+    const tile = pointerUnit?.pos ?? this.tileFromPointer(p);
     if (!tile) return;
-    const clicked = unitAt(this.state, tile);
+    const clicked = pointerUnit ?? unitAt(this.state, tile);
     const sel = selectedUnit(this.state);
 
-    if (clicked && clicked.team === 'squad') {
+    if (clicked?.team === 'squad') {
       this.setState(selectUnit(this.state, clicked.id));
       return;
     }
     if (!sel) return;
-    if (clicked && clicked.team === 'alien') {
+    if (clicked?.team === 'alien') {
       const result = shoot(this.state, sel.id, clicked.id);
       if (result) {
         this.setState(result.state);
@@ -165,7 +214,10 @@ export class BattleScene extends Phaser.Scene {
 
   private afterAction(): void {
     const sel = selectedUnit(this.state);
-    if (this.state.outcome !== 'playing') return this.redraw();
+    if (this.state.outcome !== 'playing') {
+      this.redraw();
+      return;
+    }
     if (sel && sel.ap === 0) this.autoSelect();
     else this.setState(this.state);
   }
@@ -176,7 +228,6 @@ export class BattleScene extends Phaser.Scene {
     this.tooltip.setVisible(false);
     const afterEnd = endTurn(this.state);
     this.setState(afterEnd);
-    // Slice 1: enemy turn resolves instantly after a short beat so the player sees the log.
     const { state } = runTeamTurn(afterEnd, 'alien');
     this.time.delayedCall(350, () => {
       this.busy = false;
@@ -186,91 +237,136 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private flash(at: Vec, color: number): void {
-    const r = this.add.rectangle(at.x * TILE + TILE / 2, at.y * TILE + TILE / 2, TILE, TILE, color, 0.7).setDepth(5);
-    this.tweens.add({ targets: r, alpha: 0, duration: 250, onComplete: () => r.destroy() });
+    const centre = gridToScreen(at, BOARD_ORIGIN);
+    const marker = this.add
+      .polygon(centre.x, centre.y, [0, -TILE_H / 2, TILE_W / 2, 0, 0, TILE_H / 2, -TILE_W / 2, 0], color, 0.85)
+      .setDepth(10002);
+    this.tweens.add({ targets: marker, alpha: 0, duration: 250, onComplete: () => marker.destroy() });
+  }
+
+  private track<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.boardObjects.push(object);
+    return object;
+  }
+
+  private clearBoard(): void {
+    for (const object of this.boardObjects) object.destroy();
+    this.boardObjects = [];
   }
 
   private redraw(): void {
-    const g = this.gfx;
+    this.clearBoard();
     const { grid } = this.state;
-    g.clear();
+
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
-        const kind = tileAt(grid, { x, y });
-        const color = kind === 'wall' ? COLORS.wall : kind === 'cover' ? COLORS.cover : (x + y) % 2 ? COLORS.floorAlt : COLORS.floor;
-        g.fillStyle(color, 1);
-        g.fillRect(x * TILE, y * TILE, TILE, TILE);
-        if (kind === 'cover') {
-          g.fillStyle(0x8a7549, 1);
-          g.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
-        }
+        const point = { x, y };
+        const centre = gridToScreen(point, BOARD_ORIGIN);
+        const floor = this.track(this.add.image(centre.x, centre.y, 'iso-floor'));
+        floor.setCrop(0, 0, 111, 64).setDisplaySize(TILE_W, TILE_H).setTint((x + y) % 2 ? COLORS.floorAlt : COLORS.floor).setDepth(0);
       }
     }
+
     if (this.reach) {
-      g.fillStyle(COLORS.reach, 0.55);
       for (const node of this.reach.values()) {
         if (node.dist === 0) continue;
-        g.fillRect(node.pos.x * TILE + 2, node.pos.y * TILE + 2, TILE - 4, TILE - 4);
+        const centre = gridToScreen(node.pos, BOARD_ORIGIN);
+        const highlight = this.track(this.add.polygon(
+          centre.x,
+          centre.y,
+          [0, -TILE_H / 2 + 2, TILE_W / 2 - 3, 0, 0, TILE_H / 2 - 2, -TILE_W / 2 + 3, 0],
+          COLORS.reach,
+          0.52,
+        ));
+        highlight.setDepth(1);
       }
     }
-    for (const l of this.labels) l.destroy();
-    this.labels = [];
-    for (const u of this.state.units) {
-      if (!u.alive) continue;
-      this.drawUnit(g, u);
+
+    for (const unit of this.state.units) {
+      if (unit.alive) this.drawUnit(unit);
     }
+
+    for (let y = 0; y < grid.height; y++) {
+      for (let x = 0; x < grid.width; x++) {
+        const point = { x, y };
+        const kind = tileAt(grid, point);
+        if (kind === 'floor') continue;
+        const centre = gridToScreen(point, BOARD_ORIGIN);
+        const texture = kind === 'wall' ? 'iso-wall' : 'iso-cover';
+        const width = kind === 'wall' ? TILE_W : 46;
+        const height = kind === 'wall' ? (128 * TILE_W) / 111 : (128 * width) / 111;
+        const obstacle = this.track(this.add.image(centre.x, centre.y, texture));
+        obstacle.setDisplaySize(width, height).setOrigin(0.5, 0.25).setDepth(tileDepth(point, 8));
+      }
+    }
+
     this.drawPanel();
   }
 
-  private drawUnit(g: Phaser.GameObjects.Graphics, u: Unit): void {
-    const cx = u.pos.x * TILE + TILE / 2;
-    const cy = u.pos.y * TILE + TILE / 2;
-    const isSel = u.id === this.state.selectedId;
-    if (isSel) {
-      g.lineStyle(3, COLORS.selected, 1);
-      g.strokeCircle(cx, cy, TILE / 2 - 3);
+  private drawUnit(unit: Unit): void {
+    const centre = gridToScreen(unit.pos, BOARD_ORIGIN);
+    const container = this.track(this.add.container(centre.x, centre.y));
+    container.setDepth(tileDepth(unit.pos, 5));
+
+    const shape = this.add.graphics();
+    shape.fillStyle(0x000000, 0.45).fillEllipse(0, 6, 30, 11);
+    if (unit.id === this.state.selectedId) {
+      shape.lineStyle(2, COLORS.selected, 1).strokePoints([
+        new Phaser.Geom.Point(0, -TILE_H / 2 + 1),
+        new Phaser.Geom.Point(TILE_W / 2 - 4, 0),
+        new Phaser.Geom.Point(0, TILE_H / 2 - 1),
+        new Phaser.Geom.Point(-TILE_W / 2 + 4, 0),
+      ], true);
     }
-    g.fillStyle(u.team === 'squad' ? COLORS.squad : COLORS.alien, 1);
-    if (u.team === 'squad') g.fillCircle(cx, cy, TILE / 2 - 7);
-    else g.fillTriangle(cx, cy - 13, cx - 13, cy + 11, cx + 13, cy + 11);
-    // HP bar
-    const w = TILE - 10;
-    g.fillStyle(COLORS.hpBg, 1);
-    g.fillRect(cx - w / 2, cy + TILE / 2 - 7, w, 4);
-    g.fillStyle(COLORS.hp, 1);
-    g.fillRect(cx - w / 2, cy + TILE / 2 - 7, (w * u.hp) / u.maxHp, 4);
-    // AP pips for squad
-    if (u.team === 'squad') {
-      for (let i = 0; i < u.maxAp; i++) {
-        g.fillStyle(i < u.ap ? 0xfff2a8 : 0x555555, 1);
-        g.fillCircle(cx - 6 + i * 12, cy - TILE / 2 + 6, 3);
+    shape.fillStyle(unit.team === 'squad' ? COLORS.squad : COLORS.alien, 1);
+    if (unit.team === 'squad') shape.fillRoundedRect(-12, -39, 24, 37, 5);
+    else shape.fillTriangle(0, -43, -15, -3, 15, -3);
+
+    const hpWidth = 28;
+    shape.fillStyle(COLORS.hpBg, 1).fillRect(-hpWidth / 2, -48, hpWidth, 4);
+    shape.fillStyle(COLORS.hp, 1).fillRect(-hpWidth / 2, -48, (hpWidth * unit.hp) / unit.maxHp, 4);
+    if (unit.team === 'squad') {
+      for (let i = 0; i < unit.maxAp; i++) {
+        shape.fillStyle(i < unit.ap ? 0xfff2a8 : 0x555555, 1).fillCircle(-5 + i * 10, -43, 2.5);
       }
     }
-    const label = this.add.text(cx, cy - 1, u.name.slice(0, 2).toUpperCase(), { fontFamily: 'monospace', fontSize: '11px', color: '#000' }).setOrigin(0.5);
-    this.labels.push(label);
+
+    const label = this.add.text(0, -21, unit.name.slice(0, 2).toUpperCase(), {
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      color: '#071018',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    container.add([shape, label]);
   }
 
   private drawPanel(): void {
-    const s = this.state;
-    const sel = selectedUnit(s);
-    const lines = [`ILLUMINATUS  //  ${FARMSTEAD.name}`, `Round ${s.round}   ${s.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
+    const state = this.state;
+    const sel = selectedUnit(state);
+    const lines = [`ILLUMINATUS  //  ${FARMSTEAD.name.toUpperCase()}`, `Round ${state.round}   ${state.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
     if (sel) {
-      lines.push(`> ${sel.name}`, `  HP ${sel.hp}/${sel.maxHp}   AP ${sel.ap}/${sel.maxAp}`, `  ${sel.weapon.name}  rng ${sel.weapon.range}  acc ${sel.weapon.accuracy}%  dmg ${sel.weapon.damage}`, '');
+      lines.push(
+        `> ${sel.name}`,
+        `  HP ${sel.hp}/${sel.maxHp}   AP ${sel.ap}/${sel.maxAp}`,
+        `  ${sel.weapon.name}  rng ${sel.weapon.range}`,
+        `  acc ${sel.weapon.accuracy}%  dmg ${sel.weapon.damage}`,
+        '',
+      );
     }
     lines.push('Squad:');
-    for (const u of s.units.filter((x) => x.team === 'squad')) {
-      lines.push(`  ${u.alive ? '' : 'x '}${u.name.padEnd(7)} HP ${String(u.hp).padStart(2)}  AP ${u.ap}`);
+    for (const unit of state.units.filter((candidate) => candidate.team === 'squad')) {
+      lines.push(`  ${unit.alive ? '' : 'x '}${unit.name.padEnd(7)} HP ${String(unit.hp).padStart(2)}  AP ${unit.ap}`);
     }
-    lines.push('', `Aliens left: ${livingUnits(s, 'alien').length}`, '', 'Click unit: select   Click tile: move', 'Click alien: shoot   Tab: next unit');
+    lines.push('', `Aliens left: ${livingUnits(state, 'alien').length}`, '', 'Click unit: select', 'Click tile: move', 'Click alien: shoot', 'Tab: next unit');
     this.panel.setText(lines);
-    this.logText.setText(s.log.slice(-9).map((l) => `${l.text}`));
+    this.logText.setText(state.log.slice(-9).map((entry) => entry.text));
 
-    if (s.outcome !== 'playing') {
-      this.banner.setText(s.outcome === 'won' ? 'AREA SECURED\n\nR to restart' : 'SQUAD LOST\n\nR to restart').setVisible(true);
+    if (state.outcome !== 'playing') {
+      this.banner.setText(state.outcome === 'won' ? 'AREA SECURED\n\nR to restart' : 'SQUAD LOST\n\nR to restart').setVisible(true);
       this.endTurnBtn.setVisible(false);
     } else {
       this.banner.setVisible(false);
-      this.endTurnBtn.setVisible(s.turn === 'squad');
+      this.endTurnBtn.setVisible(state.turn === 'squad');
     }
   }
 }
