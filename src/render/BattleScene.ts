@@ -238,9 +238,13 @@ export class BattleScene extends Phaser.Scene {
 
   private flash(at: Vec, color: number): void {
     const centre = gridToScreen(at, BOARD_ORIGIN);
-    const marker = this.add
-      .polygon(centre.x, centre.y, [0, -TILE_H / 2, TILE_W / 2, 0, 0, TILE_H / 2, -TILE_W / 2, 0], color, 0.85)
-      .setDepth(10002);
+    const marker = this.add.graphics();
+    marker.fillStyle(color, 0.85).fillPoints([
+      new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2),
+      new Phaser.Geom.Point(centre.x + TILE_W / 2, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2),
+      new Phaser.Geom.Point(centre.x - TILE_W / 2, centre.y),
+    ], true).setDepth(10002);
     this.tweens.add({ targets: marker, alpha: 0, duration: 250, onComplete: () => marker.destroy() });
   }
 
@@ -268,17 +272,17 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (this.reach) {
+      const highlight = this.track(this.add.graphics());
+      highlight.fillStyle(COLORS.reach, 0.52).setDepth(1);
       for (const node of this.reach.values()) {
         if (node.dist === 0) continue;
         const centre = gridToScreen(node.pos, BOARD_ORIGIN);
-        const highlight = this.track(this.add.polygon(
-          centre.x,
-          centre.y,
-          [0, -TILE_H / 2 + 2, TILE_W / 2 - 3, 0, 0, TILE_H / 2 - 2, -TILE_W / 2 + 3, 0],
-          COLORS.reach,
-          0.52,
-        ));
-        highlight.setDepth(1);
+        highlight.fillPoints([
+          new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2 + 2),
+          new Phaser.Geom.Point(centre.x + TILE_W / 2 - 3, centre.y),
+          new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2 - 2),
+          new Phaser.Geom.Point(centre.x - TILE_W / 2 + 3, centre.y),
+        ], true);
       }
     }
 
