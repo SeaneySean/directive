@@ -19,7 +19,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.image('title-splash', 'assets/art/splash.png');
+    this.load.image('title-splash', 'assets/art/splash.jpg');
     this.load.text('asset-credits', 'assets/CREDITS.md');
   }
 
