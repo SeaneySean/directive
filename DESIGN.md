@@ -1,4 +1,4 @@
-# Directive — design
+# Illuminatus — design
 
 Turn-based isometric squad tactics in the spirit of UFO: Enemy Unknown. Built for the
 September Comp (deadline 30 Sep 2026). Working title; rename before shipping.

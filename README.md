@@ -1,4 +1,4 @@
-# Directive
+# Illuminatus
 
 Turn-based squad tactics in the browser, in the spirit of UFO: Enemy Unknown. Built with AI for
 the September Comp.

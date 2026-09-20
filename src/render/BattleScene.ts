@@ -253,7 +253,7 @@ export class BattleScene extends Phaser.Scene {
   private drawPanel(): void {
     const s = this.state;
     const sel = selectedUnit(s);
-    const lines = [`DIRECTIVE  //  ${FARMSTEAD.name}`, `Round ${s.round}   ${s.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
+    const lines = [`ILLUMINATUS  //  ${FARMSTEAD.name}`, `Round ${s.round}   ${s.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
     if (sel) {
       lines.push(`> ${sel.name}`, `  HP ${sel.hp}/${sel.maxHp}   AP ${sel.ap}/${sel.maxAp}`, `  ${sel.weapon.name}  rng ${sel.weapon.range}  acc ${sel.weapon.accuracy}%  dmg ${sel.weapon.damage}`, '');
     }
