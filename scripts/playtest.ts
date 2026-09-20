@@ -17,7 +17,7 @@ import { RESEARCH, chooseResearch, isResearchAvailable } from '../src/game/strat
 import type { CampaignState } from '../src/game/strategy/types.ts';
 
 const pct = (count: number, total: number) => `${((100 * count) / total).toFixed(1)}%`;
-const MAX_CAMPAIGN_TURNS = 15;
+const MAX_CAMPAIGN_TURNS = 40;
 
 function randomIndex(seed: number, length: number): { index: number; seed: number } {
   const random = nextRandom(seed);

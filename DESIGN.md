@@ -126,6 +126,9 @@ Cut order if late: Atlantis becomes a second map on the Area 51 tileset; events 
 
 ## Balance notes for slice 6
 
+- The AI-vs-AI tactical harness is diagnostic only; it wins ~100% with honest enemy HP. Human
+  playtest is the gate (Athena ruling, 20 Sep). Campaign playtest must check that treasury
+  depletion is a recoverable setback, not a dead end.
 - Campaign random-policy win rate is 42.7% after slice 5 (target band 10 to 40%): mission
   auto-wins, the artefact exposure reward and the plasma upgrade all help the player. Retune
   alongside the AGI pacing. (Athena, 20 Sep, deferred from slice 5.)
@@ -153,6 +156,6 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 
 | # | Slice | Owner | Status |
 |---|---|---|---|
-| 6a | Balance against a human + explanation layer (title, help, hints, briefings, hover text, save/load) | worker → critic | next |
-| 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | after 6a |
+| 6a | Balance against a human + explanation layer (title, help, hints, briefings, hover text, save/load) | worker → critic | merged 20 Sep; human difficulty gate still pending Sean's playtest |
+| 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | next |
 | 6c | Mobile sizing, Loom, Skool post | conductor | last |

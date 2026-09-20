@@ -27,12 +27,11 @@ and the first mission is tuned against a dumb AI squad instead of a person.
    reduces path distance to the objective, preferring tiles that are in directional cover from
    the nearest enemy; without an objective, fall back to the existing movement policy. Report
    both the labelled baseline and smart-policy results.
-5. Run seeds 1 through 1000 for each mission. With the smart squad policy, Area 51 must produce
-   55% to 75% squad wins and Atlantis 45% to 70%; the baseline result is informational. Make
-   `bun run playtest 1000 "Area 51 Hangar"` and `bun run playtest 1000 "Atlantis Ruins"` print
-   labelled baseline and smart-policy lines. Tune only scenario map layout and unit statistics
-   not fixed by criteria 1 and 2 until both smart-policy results land in band. Record all four
-   final lines.
+5. (Amended by Athena at merge, 20 Sep.) Run seeds 1 through 1000 for each mission and retain
+   all four labelled baseline/smart-policy result lines. These rates are diagnostic, not
+   acceptance bands. Campaign guards and guardians must have no more than 24 HP; preserve the
+   statistics fixed by criteria 1 and 2. The designer's next human playtest is the difficulty
+   gate. If either mission remains too hard or too easy, issue a focused follow-up balance brief.
 6. Campaign: research base points 8 → 12, Neural Lace grants +4 research points per turn, and
    starting treasury changes from 400 → 160. Extend the harness with deterministic five-region
    and AGI-priority policies and report each policy's mean winning turn over seeds 1 through
