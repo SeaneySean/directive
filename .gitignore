@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# original full-size generated art, kept out of the repo
+art-src/
