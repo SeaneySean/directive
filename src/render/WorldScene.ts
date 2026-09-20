@@ -26,49 +26,31 @@ import {
 import type { CampaignState, InfluencePath, RegionState } from '../game/strategy/types.ts';
 import { showHelpOverlay } from './HelpOverlay.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
+import { COL, HEX, crtScanlines, displayStyle, drawPanel, goldButton, textStyle } from './theme.ts';
+import { MAP_OFFSET, MAP_SCALE, mapPointToScreen, regionPolygon } from './world-regions.ts';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
 const PANEL_X = 1000;
 
-const COLOURS = {
-  background: 0x0d1117,
-  panel: 0x151b24,
-  region: 0x232d3a,
-  regionSelected: 0x34445a,
-  held: 0x96742d,
-  outline: 0x536277,
-  subvert: 0xd4af37,
-  force: 0xc94b4b,
-  enlighten: 0x45c9d1,
-  empty: 0x090c10,
-  exposure: 0xa35bd6,
-};
-
-interface MapBox {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-const MAP_BOXES: readonly MapBox[] = [
-  { id: 'north-america', x: 90, y: 130, width: 190, height: 115 },
-  { id: 'south-america', x: 210, y: 330, width: 105, height: 185 },
-  { id: 'europe', x: 445, y: 135, width: 145, height: 95 },
-  { id: 'middle-east', x: 620, y: 255, width: 145, height: 90 },
-  { id: 'africa', x: 450, y: 300, width: 150, height: 175 },
-  { id: 'russia', x: 630, y: 114, width: 230, height: 101 },
-  { id: 'asia', x: 790, y: 235, width: 180, height: 140 },
-  { id: 'oceania', x: 800, y: 430, width: 165, height: 105 },
-] as const;
-
 const PATH_COLOUR: Record<InfluencePath, number> = {
-  subvert: COLOURS.subvert,
-  force: COLOURS.force,
-  enlighten: COLOURS.enlighten,
+  subvert: COL.subvert,
+  force: COL.force,
+  enlighten: COL.enlighten,
 };
+
+const PATH_HEX: Record<InfluencePath, string> = {
+  subvert: HEX.gold,
+  force: HEX.forceText,
+  enlighten: HEX.enlightenText,
+};
+
+function dominantPath(region: RegionState): InfluencePath {
+  let dominant: InfluencePath = 'subvert';
+  if (region.meters.force > region.meters[dominant]) dominant = 'force';
+  if (region.meters.enlighten > region.meters[dominant]) dominant = 'enlighten';
+  return dominant;
+}
 
 export class WorldScene extends Phaser.Scene {
   private state!: CampaignState;
@@ -81,32 +63,37 @@ export class WorldScene extends Phaser.Scene {
     super('world');
   }
 
+  preload(): void {
+    this.load.image('world-map', 'assets/art/world-map.jpg');
+    // The designer's files are event-<shortname>.jpg, but the event id for the
+    // miracle is 'miracle-at-the-well'; map ids to their image filenames.
+    const eventImages: ReadonlyArray<readonly [string, string]> = [
+      ['candidate', 'candidate'],
+      ['leak', 'leak'],
+      ['whistleblower', 'whistleblower'],
+      ['miracle-at-the-well', 'miracle'],
+      ['summit', 'summit'],
+    ];
+    for (const [id, file] of eventImages) {
+      this.load.image(`event-${id}`, `assets/art/event-${file}.jpg`);
+    }
+    for (const id of ['area-51', 'atlantis']) {
+      this.load.image(`briefing-${id}`, `assets/art/briefing-${id}.jpg`);
+    }
+  }
+
   create(): void {
     this.state = (this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState | undefined)
       ?? createCampaign(Date.now() | 0);
     this.registry.set(CAMPAIGN_REGISTRY_KEY, this.state);
     writeCampaignSave(this.state);
-    this.cameras.main.setBackgroundColor(COLOURS.background);
+    this.cameras.main.setBackgroundColor(COL.bg);
     this.redraw();
   }
 
   private track<T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth>(object: T): T {
     this.objects.push(object);
     return object;
-  }
-
-  private text(
-    x: number,
-    y: number,
-    value: string | string[],
-    size = 14,
-    colour = '#d9e1ea',
-  ): Phaser.GameObjects.Text {
-    return this.track(this.add.text(x, y, value, {
-      fontFamily: 'monospace',
-      fontSize: `${size}px`,
-      color: colour,
-    }));
   }
 
   private redraw(): void {
@@ -119,29 +106,127 @@ export class WorldScene extends Phaser.Scene {
     for (const object of this.objects) object.destroy();
     this.objects = [];
 
-    const graphics = this.track(this.add.graphics());
-    graphics.fillStyle(COLOURS.panel, 1).fillRect(PANEL_X, 0, WIDTH - PANEL_X, HEIGHT);
-    graphics.lineStyle(1, COLOURS.outline, 1).lineBetween(PANEL_X, 0, PANEL_X, HEIGHT);
-
-    this.text(34, 42, 'ILLUMINATUS // WORLD CONTROL', 24, '#d4af37');
-    this.text(35, 74, 'ASSIGN OPERATIVES. SHAPE THE WORLD. STAY HIDDEN.', 12, '#718096');
-    this.hoverText = this.track(this.add.text(0, 0, '', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
-      backgroundColor: '#05070aee', padding: { x: 7, y: 5 },
-      wordWrap: { width: 360 },
-    })).setDepth(15_000).setVisible(false);
-
-    for (const box of MAP_BOXES) {
-      const region = this.state.regions.find((candidate) => candidate.id === box.id)!;
-      this.drawRegion(graphics, box, region);
-    }
-
-    this.drawPanel(graphics);
+    this.drawMap();
+    this.drawHud();
     this.drawMissionsPanel();
     this.drawResearchPanel();
     this.drawHelpButton();
     this.drawGuide();
     if (pendingEvent(this.state)) this.drawEventModal();
+  }
+
+  /** Night-earth map fills the map area; regions are translucent polygons over it. */
+  private drawMap(): void {
+    if (this.textures.exists('world-map')) {
+      const map = this.track(this.add.image(MAP_OFFSET.x, MAP_OFFSET.y, 'world-map'));
+      map.setOrigin(0).setScale(MAP_SCALE).setDepth(0);
+    }
+    for (const region of this.state.regions) {
+      this.drawRegion(region);
+    }
+    this.hoverText = this.track(this.add.text(0, 0, '', textStyle(13, HEX.white, {
+      backgroundColor: HEX.hoverBg,
+      padding: { x: 7, y: 5 },
+      wordWrap: { width: 360 },
+    }))).setDepth(15_000).setVisible(false);
+  }
+
+  private drawRegion(region: RegionState): void {
+    const polygon = regionPolygon(region.id);
+    if (!polygon) return;
+    const points = polygon.points.map((point) => mapPointToScreen(point));
+    const centroid = mapPointToScreen(polygon.centroid);
+    const path = dominantPath(region);
+    const selected = region.id === this.selectedRegionId;
+
+    const fill = this.track(this.add.graphics());
+    fill.fillStyle(region.held ? COL.gold : PATH_COLOUR[path], region.held ? 0.42 : 0.24);
+    fill.fillPoints(points.map((point) => new Phaser.Geom.Point(point.x, point.y)), true);
+    fill.setDepth(1);
+    if (region.held || selected) {
+      fill.lineStyle(2, COL.gold, selected ? 1 : 0.8);
+      fill.strokePoints(points.map((point) => new Phaser.Geom.Point(point.x, point.y)), true, true);
+    }
+
+    const hit = this.track(this.add.polygon(0, 0, points, COL.white, 0.001));
+    hit.setDepth(2).setOrigin(0, 0);
+    hit.setInteractive({
+      hitArea: hit.geom,
+      hitAreaCallback: Phaser.Geom.Polygon.Contains,
+      useHandCursor: true,
+    });
+    this.attachHover(hit, `${region.name}: ${regionDescription(region)}`);
+    if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
+      hit.on('pointerdown', () => {
+        this.selectedRegionId = region.id;
+        this.redraw();
+      });
+    }
+
+    this.drawMeterCard(region, centroid, path);
+  }
+
+  private drawMeterCard(region: RegionState, centre: { x: number; y: number }, path: InfluencePath): void {
+    const width = 132;
+    const height = 54;
+    const held = region.held;
+    const card = this.track(this.add.rectangle(centre.x, centre.y, width, height, COL.panel, 0.88));
+    card.setStrokeStyle(1, held ? COL.gold : PATH_COLOUR[path], 0.8).setDepth(3);
+
+    this.track(this.add.text(centre.x, centre.y - 20, region.name.toUpperCase(), textStyle(11, held ? HEX.held : HEX.text, {
+      fontFamily: '"Cinzel", Georgia, serif',
+    }))).setOrigin(0.5).setDepth(4);
+
+    const left = centre.x - width / 2;
+    const right = centre.x + width / 2;
+    const labelX = left + 7;   // path letter, left-aligned and fully inside the card
+    const valueX = right - 7;  // meter value, right-aligned
+    const barX = left + 22;
+    const barW = right - 30 - barX;
+    (['subvert', 'force', 'enlighten'] as const).forEach((meterPath, index) => {
+      const y = centre.y - 7 + index * 11;
+      const shown = visibleMeter(this.state, region.meters[meterPath]);
+      const g = this.track(this.add.graphics()).setDepth(4);
+      g.fillStyle(COL.empty, 1).fillRect(barX, y, barW, 6);
+      g.fillStyle(PATH_COLOUR[meterPath], 1).fillRect(barX, y, (barW * shown) / 100, 6);
+      this.track(this.add.text(labelX, y - 3, meterPath[0]!.toUpperCase(), textStyle(11, PATH_HEX[meterPath]))).setDepth(5);
+      this.track(this.add.text(valueX, y - 3, String(Math.round(shown)), textStyle(11, HEX.text))).setOrigin(1, 0).setDepth(5);
+    });
+  }
+
+  private drawHud(): void {
+    const graphics = this.track(drawPanel(this, PANEL_X, 0, WIDTH - PANEL_X, HEIGHT));
+    graphics.setDepth(10);
+
+    this.track(this.add.text(PANEL_X + 16, 18, 'ILLUMINATUS', displayStyle(26, HEX.gold))).setDepth(11);
+    this.track(this.add.text(PANEL_X + 16, 54, 'WORLD CONTROL', textStyle(12, HEX.dim))).setDepth(11);
+
+    const used = Object.keys(this.state.assignments).length;
+    this.track(this.add.text(PANEL_X + 16, 82, `TURN ${this.state.turn}`, textStyle(20, HEX.goldBright))).setDepth(11);
+    this.track(this.add.text(PANEL_X + 16, 114, [
+      `TREASURY  ${this.state.treasury}`,
+      `AGENTS    ${used}/${this.state.agents}`,
+      `REGIONS   ${heldRegions(this.state).length}/5`,
+    ], textStyle(14, HEX.text))).setDepth(11);
+
+    this.track(this.add.text(PANEL_X + 16, 186, `EXPOSURE ${Math.round(this.state.exposure)}/100`, textStyle(13, HEX.exposureText))).setDepth(11);
+    const exposureBar = this.track(this.add.graphics()).setDepth(11);
+    exposureBar.fillStyle(COL.empty, 1).fillRect(PANEL_X + 16, 210, 248, 14);
+    exposureBar.fillStyle(COL.exposure, 1).fillRect(PANEL_X + 16, 210, (248 * this.state.exposure) / 100, 14);
+
+    const region = this.state.regions.find((candidate) => candidate.id === this.selectedRegionId);
+    if (region) this.drawActionPicker(region);
+    else this.track(this.add.text(PANEL_X + 16, 252, 'SELECT A REGION', textStyle(13, HEX.dim))).setDepth(11);
+
+    const endTurn = this.track(goldButton(this, PANEL_X + 20, 655, 'END TURN', () => {
+      this.state = endTurnCampaign(this.state);
+      this.redraw();
+    }, { size: 16, padding: { x: 14, y: 9 } }));
+    endTurn.setDepth(11);
+    if (this.state.outcome !== 'playing' || pendingEvent(this.state)) {
+      endTurn.disableInteractive();
+      endTurn.setAlpha(0.5);
+    }
   }
 
   private attachHover(object: Phaser.GameObjects.GameObject, copy: string): void {
@@ -157,143 +242,53 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawHelpButton(): void {
-    const help = this.track(this.add.text(566, 40, ' ? ', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37',
-      padding: { x: 5, y: 3 },
-    }));
-    help.setInteractive({ useHandCursor: true }).on('pointerdown', () => showHelpOverlay(this));
+    const help = this.track(goldButton(this, 566, 36, '?', () => showHelpOverlay(this), { size: 15, padding: { x: 6, y: 3 } }));
+    help.setDepth(2000);
   }
 
   private drawGuide(): void {
     const copy = guideText(this.state.turn);
     if (!copy || this.dismissedGuideTurns.has(this.state.turn)) return;
-    const strip = this.track(this.add.rectangle(WIDTH / 2, 16, WIDTH, 32, 0x2b2413, 1))
-      .setStrokeStyle(1, COLOURS.subvert).setDepth(2000);
-    const label = this.text(26, 6, copy, 14, '#fff1bd').setDepth(2001);
-    const close = this.track(this.add.text(1230, 4, ' X ', {
-      fontFamily: 'monospace', fontSize: '14px', color: '#0d1117', backgroundColor: '#d4af37',
-      padding: { x: 4, y: 2 },
-    })).setDepth(2001);
-    close.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+    const strip = this.track(this.add.rectangle(WIDTH / 2, 16, WIDTH, 32, COL.hintBg, 1))
+      .setStrokeStyle(1, COL.subvert).setDepth(2000);
+    const label = this.track(this.add.text(26, 6, copy, textStyle(14, HEX.held))).setDepth(2001);
+    const close = this.track(goldButton(this, 1230, 4, 'X', () => {
       this.dismissedGuideTurns.add(this.state.turn);
       strip.destroy();
       label.destroy();
-      close.destroy();
-    });
-  }
-
-  private drawRegion(graphics: Phaser.GameObjects.Graphics, box: MapBox, region: RegionState): void {
-    const selected = region.id === this.selectedRegionId;
-    graphics.fillStyle(region.held ? COLOURS.held : selected ? COLOURS.regionSelected : COLOURS.region, 1);
-    graphics.fillRect(box.x, box.y, box.width, box.height);
-    graphics.lineStyle(selected ? 3 : 1, selected ? COLOURS.subvert : COLOURS.outline, 1);
-    graphics.strokeRect(box.x, box.y, box.width, box.height);
-
-    const hitArea = this.track(this.add.rectangle(
-      box.x + box.width / 2,
-      box.y + box.height / 2,
-      box.width,
-      box.height,
-      0xffffff,
-      0.001,
-    ));
-    hitArea.setInteractive({ useHandCursor: true });
-    this.attachHover(hitArea, `${region.name}: ${regionDescription(region)}`);
-    if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
-      hitArea.on('pointerdown', () => {
-        this.selectedRegionId = region.id;
-        this.redraw();
-      });
-    }
-
-    this.text(box.x + 9, box.y + 8, region.name.toUpperCase(), 13, region.held ? '#fff1bd' : '#e4e9ef');
-    if (region.held) this.text(box.x + box.width - 47, box.y + 8, 'HELD', 11, '#fff1bd');
-    const assigned = this.state.assignments[region.id];
-    if (assigned) this.text(box.x + 9, box.y + 27, `> ${ACTIONS[assigned]!.name}`, 10, '#d4af37');
-
-    const barX = box.x + 9;
-    const barWidth = box.width - 18;
-    const barStart = box.y + box.height - 42;
-    (['subvert', 'force', 'enlighten'] as const).forEach((path, index) => {
-      const y = barStart + index * 12;
-      const shown = visibleMeter(this.state, region.meters[path]);
-      graphics.fillStyle(COLOURS.empty, 1).fillRect(barX, y, barWidth, 7);
-      graphics.fillStyle(PATH_COLOUR[path], 1).fillRect(barX, y, barWidth * shown / 100, 7);
-      this.text(barX + 2, y - 2, `${path[0]!.toUpperCase()} ${Math.round(shown)}`, 8, '#ffffff');
-    });
-  }
-
-  private drawPanel(graphics: Phaser.GameObjects.Graphics): void {
-    const used = Object.keys(this.state.assignments).length;
-    this.text(PANEL_X + 20, 22, `TURN ${this.state.turn}`, 22, '#d4af37');
-    this.text(PANEL_X + 20, 58, [
-      `TREASURY  ${this.state.treasury}`,
-      `AGENTS    ${used}/${this.state.agents}`,
-      `REGIONS   ${heldRegions(this.state).length}/5`,
-    ], 15);
-
-    this.text(PANEL_X + 20, 132, `EXPOSURE ${Math.round(this.state.exposure)}/100`, 13, '#c98cf2');
-    graphics.fillStyle(COLOURS.empty, 1).fillRect(PANEL_X + 20, 155, 240, 14);
-    graphics.fillStyle(COLOURS.exposure, 1).fillRect(PANEL_X + 20, 155, 240 * this.state.exposure / 100, 14);
-
-    const region = this.state.regions.find((candidate) => candidate.id === this.selectedRegionId);
-    if (region) this.drawActionPicker(region);
-    else this.text(PANEL_X + 20, 210, 'SELECT A REGION', 14, '#718096');
-
-    const endTurn = this.track(this.add.text(PANEL_X + 20, 655, '      END TURN      ', {
-      fontFamily: 'monospace',
-      fontSize: '18px',
-      color: '#0d1117',
-      backgroundColor: '#d4af37',
-      padding: { x: 8, y: 8 },
-    }));
-    if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
-      endTurn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-        this.state = endTurnCampaign(this.state);
-        this.redraw();
-      });
-    }
+    }, { size: 13, padding: { x: 5, y: 2 } }));
+    close.setDepth(2001);
   }
 
   private drawMissionsPanel(): void {
     const x = 610;
-    this.track(this.add.rectangle(785, 74, 350, 74, COLOURS.panel, 0.97))
-      .setStrokeStyle(1, COLOURS.outline);
-    this.text(x + 8, 42, 'MISSIONS', 12, '#d4af37');
+    this.track(drawPanel(this, 610, 36, 350, 76, { alpha: 0.97 })).setDepth(20);
+    this.track(this.add.text(x + 8, 42, 'MISSIONS', textStyle(12, HEX.gold))).setDepth(21);
     const available = new Set(availableMissions(this.state).map((mission) => mission.id));
     const listed = MISSIONS.filter((mission) =>
       available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
     );
     if (!listed.length) {
-      this.text(x + 8, 64, 'NO MISSIONS AVAILABLE', 11, '#596575');
+      this.track(this.add.text(x + 8, 64, 'NO MISSIONS AVAILABLE', textStyle(11, HEX.faint))).setDepth(21);
       return;
     }
     listed.forEach((mission, index) => {
       const y = 62 + index * 24;
       const complete = this.state.missions[mission.id]?.status === 'completed';
-      this.text(
-        x + 8,
-        y,
-        `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
-        10,
-        complete ? '#75d69c' : '#e9eef5',
-      );
+      this.track(this.add.text(x + 8, y, `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
+        textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(21);
       if (!complete) {
-        const launch = this.track(this.add.text(x + 272, y - 5, ' LAUNCH ', {
-          fontFamily: 'monospace',
-          fontSize: '10px',
-          color: '#0d1117',
-          backgroundColor: '#d4af37',
-          padding: { x: 4, y: 4 },
-        }));
-        if (!pendingEvent(this.state)) {
-          launch.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            this.drawMissionBriefing(
-              mission.id,
-              mission.name,
-              mission.scenario.units.filter((unit) => unit.team === 'alien').length,
-            );
-          });
+        const launch = this.track(goldButton(this, x + 272, y - 5, 'LAUNCH', () => {
+          this.drawMissionBriefing(
+            mission.id,
+            mission.name,
+            mission.scenario.units.filter((unit) => unit.team === 'alien').length,
+          );
+        }, { size: 11, padding: { x: 5, y: 4 } }));
+        launch.setDepth(21);
+        if (pendingEvent(this.state)) {
+          launch.disableInteractive();
+          launch.setAlpha(0.5);
         }
       }
     });
@@ -307,15 +302,17 @@ export class WorldScene extends Phaser.Scene {
       objects.push(object);
       return object;
     };
-    add(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x030507, 0.9)).setInteractive();
-    add(this.add.rectangle(640, 360, 760, 520, COLOURS.panel, 1)).setStrokeStyle(2, COLOURS.subvert);
-    add(this.add.text(310, 125, `MISSION BRIEFING // ${missionName.toUpperCase()}`, {
-      fontFamily: 'monospace', fontSize: '23px', color: '#d4af37',
-    }));
-    add(this.add.text(310, 180, copy.why, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#e7edf5', wordWrap: { width: 660 },
-    }));
-    add(this.add.text(310, 270, [
+    add(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.overlay, 0.92)).setInteractive();
+    add(this.add.rectangle(640, 372, 900, 560, COL.panel, 1)).setStrokeStyle(2, COL.gold);
+    if (this.textures.exists(`briefing-${missionId}`)) {
+      const backdrop = add(this.add.image(640, 290, `briefing-${missionId}`));
+      const scale = Math.max(880 / backdrop.width, 300 / backdrop.height);
+      backdrop.setScale(scale);
+      backdrop.setCrop(0, 0, 880 / scale, 300 / scale);
+    }
+    add(this.add.text(210, 96, `MISSION BRIEFING // ${missionName.toUpperCase()}`, displayStyle(22, HEX.gold)));
+    add(this.add.text(210, 168, copy.why, textStyle(16, HEX.text, { wordWrap: { width: 780 } })));
+    add(this.add.text(210, 244, [
       `OBJECTIVE: ${copy.objective}`,
       '',
       'WIN: Hold the objective for 2 squad turns.',
@@ -323,44 +320,35 @@ export class WorldScene extends Phaser.Scene {
       '',
       `ENEMIES: ${enemyCount}`,
       `REWARD: ${copy.reward}`,
-    ], {
-      fontFamily: 'monospace', fontSize: '16px', color: '#aeb9c7', lineSpacing: 8,
+    ], textStyle(16, HEX.textDim, { lineSpacing: 8 })));
+    add(goldButton(this, 350, 600, 'BACK', () => objects.forEach((object) => object.destroy()), {
+      size: 17,
+      padding: { x: 12, y: 7 },
     }));
-    const back = add(this.add.text(385, 540, ' BACK ', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#8795a8',
-      padding: { x: 10, y: 7 },
-    })).setInteractive({ useHandCursor: true });
-    back.on('pointerdown', () => objects.forEach((object) => object.destroy()));
-    const go = add(this.add.text(785, 540, ' GO ', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37',
-      padding: { x: 10, y: 7 },
-    })).setInteractive({ useHandCursor: true });
-    go.on('pointerdown', () => {
+    add(goldButton(this, 780, 600, 'GO', () => {
       const next = startMission(this.state, missionId);
       if (next === this.state) return;
       this.state = next;
       this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
       writeCampaignSave(next);
       this.scene.start('battle', { missionId });
-    });
+    }, { size: 17, padding: { x: 12, y: 7 } }));
   }
 
   private drawActionPicker(region: RegionState): void {
-    this.text(PANEL_X + 20, 198, region.name.toUpperCase(), 16, '#ffffff');
-    this.text(PANEL_X + 20, 222, `RESISTANCE ${region.resistance}  WEALTH ${region.wealth}`, 11, '#8795a8');
+    this.track(this.add.text(PANEL_X + 16, 246, region.name.toUpperCase(), textStyle(16, HEX.white))).setDepth(11);
+    this.track(this.add.text(PANEL_X + 16, 272, `RESISTANCE ${region.resistance}  WEALTH ${region.wealth}`, textStyle(11, HEX.dim))).setDepth(11);
 
     const assigned = this.state.assignments[region.id];
     if (assigned) {
-      this.text(PANEL_X + 20, 258, `ASSIGNED: ${ACTIONS[assigned]!.name}`, 12, '#d4af37');
-      const clear = this.track(this.add.text(PANEL_X + 20, 288, ' CLEAR ASSIGNMENT ', {
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        color: '#ffffff',
-        backgroundColor: '#5b2730',
+      this.track(this.add.text(PANEL_X + 16, 302, `ASSIGNED: ${ACTIONS[assigned]!.name}`, textStyle(12, HEX.gold))).setDepth(11);
+      const clear = this.track(this.add.text(PANEL_X + 16, 330, ' CLEAR ASSIGNMENT ', textStyle(12, HEX.white, {
+        backgroundColor: HEX.dangerBg,
         padding: { x: 5, y: 5 },
-      }));
+      }))).setDepth(11);
+      clear.setInteractive({ useHandCursor: true });
       if (!pendingEvent(this.state)) {
-        clear.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        clear.on('pointerdown', () => {
           this.state = clearAction(this.state, region.id);
           this.redraw();
         });
@@ -370,16 +358,13 @@ export class WorldScene extends Phaser.Scene {
 
     const legal = new Set(availableActions(this.state, region.id).map((action) => action.id));
     Object.values(ACTIONS).forEach((action, index) => {
-      const y = 252 + index * 52;
+      const y = 302 + index * 46;
       const available = legal.has(action.id);
-      const label = this.track(this.add.text(PANEL_X + 20, y, `${action.name.toUpperCase()}  £${actionCost(this.state, action)}\n${this.effectLabel(action.id)}`, {
-        fontFamily: 'monospace',
-        fontSize: '11px',
-        color: available ? '#e9eef5' : '#596575',
-        backgroundColor: available ? '#263241' : '#171d25',
+      const label = this.track(this.add.text(PANEL_X + 16, y, `${action.name.toUpperCase()}  £${actionCost(this.state, action)}\n${this.effectLabel(action.id)}`, textStyle(11, available ? HEX.text : HEX.faint, {
+        backgroundColor: available ? HEX.actionAvailable : HEX.actionDisabled,
         padding: { x: 6, y: 5 },
-        fixedWidth: 240,
-      }));
+        fixedWidth: 248,
+      }))).setDepth(11);
       label.setInteractive({ useHandCursor: available });
       this.attachHover(label, ACTION_TEXT[action.id]!);
       if (available && !pendingEvent(this.state) && isActionAvailable(this.state, region.id, action.id)) {
@@ -401,29 +386,31 @@ export class WorldScene extends Phaser.Scene {
     return [...effects, exposure].join('  ');
   }
 
+  /** Green CRT-phosphor research panel with scanlines and pulsing active node. */
   private drawResearchPanel(): void {
     const panelY = 545;
-    this.track(this.add.rectangle(500, panelY + 82.5, 960, 165, COLOURS.panel, 0.97))
-      .setStrokeStyle(1, COLOURS.outline);
-    this.text(32, panelY + 8, 'RESEARCH', 14, '#c98cf2');
+    const panel = this.track(this.add.rectangle(500, panelY + 77, 960, 154, COL.crtBg, 0.98));
+    panel.setStrokeStyle(1, COL.crtDim, 0.9).setDepth(30);
+
+    this.track(this.add.text(32, panelY + 8, 'RESEARCH', textStyle(14, HEX.crt, { fontFamily: '"Cinzel", Georgia, serif' }))).setDepth(31);
 
     const disciplines = ['psychology', 'weaponry', 'cybernetics', 'mythology'] as const;
     disciplines.forEach((discipline, column) => {
       const x = 32 + column * 237;
-      this.text(x, panelY + 31, discipline.toUpperCase(), 11, '#8795a8');
+      this.track(this.add.text(x, panelY + 30, discipline.toUpperCase(), textStyle(11, HEX.crtDim))).setDepth(31);
       Object.values(RESEARCH).filter((node) => node.discipline === discipline).forEach((node, index) => {
         const active = this.state.activeResearch === node.id;
         const complete = this.state.completedResearch.includes(node.id);
         const available = isResearchAvailable(this.state, node.id);
         const status = complete ? 'DONE' : active ? `${this.state.researchPoints}/${node.cost}` : available ? `${node.cost} RP` : 'LOCKED';
-        const card = this.track(this.add.text(x, panelY + 51 + index * 34, `${node.name.toUpperCase()}\n${status}`, {
-          fontFamily: 'monospace',
-          fontSize: '10px',
-          color: complete ? '#75d69c' : active ? '#ffffff' : available ? '#e9eef5' : '#596575',
-          backgroundColor: active ? '#68418a' : '#202936',
-          padding: { x: 5, y: 3 },
-          fixedWidth: 218,
-        }));
+
+        const cardY = panelY + 49 + index * 34;
+        const card = this.track(this.add.rectangle(x + 109, cardY + 14, 218, 30, active ? COL.crtActive : COL.crtPanel, 1));
+        card.setStrokeStyle(active ? 2 : 1, active ? COL.crtGreen : COL.crtDim, 0.95).setDepth(31);
+
+        const colour = complete ? HEX.complete : active ? HEX.crt : available ? HEX.crt : HEX.crtDim;
+        const label = this.track(this.add.text(x + 8, cardY, `${node.name.toUpperCase()}\n${status}`, textStyle(11, colour))).setDepth(32);
+        void label;
         card.setInteractive({ useHandCursor: available });
         this.attachHover(card, `${node.name}: ${RESEARCH_TEXT[node.id] ?? ''}`);
         if (available && !pendingEvent(this.state)) {
@@ -432,40 +419,70 @@ export class WorldScene extends Phaser.Scene {
             this.redraw();
           });
         }
+        if (active) {
+          this.tweens.add({
+            targets: card,
+            alpha: { from: 0.55, to: 1 },
+            duration: 800,
+            yoyo: true,
+            repeat: -1,
+          });
+        }
       });
     });
+
+    this.track(crtScanlines(this, 0, panelY, 1000, 165)).setDepth(33);
   }
 
   private drawEventModal(): void {
     const event = pendingEvent(this.state);
     if (!event) return;
-    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x05070a, 0.82))
-      .setInteractive();
-    this.track(this.add.rectangle(640, 360, 680, 440, COLOURS.panel, 1))
-      .setStrokeStyle(2, COLOURS.exposure);
-    this.text(340, 165, 'EVENT', 12, '#c98cf2');
-    this.text(340, 190, event.name.toUpperCase(), 26, '#ffffff');
-    this.text(340, 236, event.description, 14, '#d4af37').setWordWrapWidth(600);
-    this.text(340, 268, EVENT_CONTEXT[event.id] ?? '', 14, '#aeb9c7').setWordWrapWidth(600);
+    const DEPTH = 10_000;
+    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.bg, 0.86)).setInteractive().setDepth(DEPTH);
+    this.track(this.add.rectangle(640, 360, 820, 500, COL.panel, 1)).setStrokeStyle(2, COL.exposure).setDepth(DEPTH + 1);
+
+    // Illustration column on the left, with an explicit 25px gutter before the text.
+    const artX = 318;
+    const artW = 236;
+    const artH = 440;
+    if (this.textures.exists(`event-${event.id}`)) {
+      const image = this.track(this.add.image(artX, 360, `event-${event.id}`));
+      const scale = Math.min(artW / image.width, artH / image.height);
+      image.setScale(scale).setOrigin(0.5).setDepth(DEPTH + 1);
+    } else {
+      const glyph = this.track(this.add.graphics());
+      glyph.fillStyle(COL.gold, 0.9).fillTriangle(artX, 250, artX - 95, 430, artX + 95, 430);
+      glyph.setDepth(DEPTH + 1);
+    }
+
+    // Text column on the right, clear of the artwork.
+    const textX = 460;
+    const textW = 560;
+    this.track(this.add.text(textX, 128, 'EVENT', textStyle(12, HEX.exposureText))).setDepth(DEPTH + 2);
+    this.track(this.add.text(textX, 150, event.name.toUpperCase(), displayStyle(24, HEX.white))).setDepth(DEPTH + 2);
+    const description = this.track(this.add.text(textX, 196, event.description, textStyle(14, HEX.gold)).setWordWrapWidth(textW)).setDepth(DEPTH + 2);
+    const context = this.track(this.add.text(textX, 202 + description.height, EVENT_CONTEXT[event.id] ?? '', textStyle(13, HEX.textDim)).setWordWrapWidth(textW)).setDepth(DEPTH + 2);
+
     const labels = EVENT_CHOICE_TEXT[event.id] ?? [];
+    const buttonsTop = 202 + description.height + context.height + 18;
     event.choices.forEach((choice, index) => {
       const available = !choice.available || choice.available(this.state);
-      const button = this.track(this.add.text(340, 400 + index * 62, ` ${(labels[index] ?? choice.label).toUpperCase()} `, {
-        fontFamily: 'monospace',
-        fontSize: '15px',
-        color: available ? '#0d1117' : '#596575',
-        backgroundColor: available ? '#d4af37' : '#202936',
+      const button = this.track(this.add.text(textX, buttonsTop + index * 62, ` ${(labels[index] ?? choice.label).toUpperCase()} `, textStyle(14, available ? HEX.black : HEX.faint, {
+        backgroundColor: available ? HEX.goldBright : HEX.panelMid,
         padding: { x: 8, y: 8 },
-      }));
+        wordWrap: { width: textW },
+      }))).setDepth(DEPTH + 3);
       if (available) {
-        button.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        button.setInteractive({ useHandCursor: true });
+        button.on('pointerover', () => button.setBackgroundColor(HEX.goldHover));
+        button.on('pointerout', () => button.setBackgroundColor(HEX.goldBright));
+        button.on('pointerdown', () => {
           this.state = resolveEvent(this.state, index);
           this.redraw();
         });
       }
     });
   }
-
 }
 
 const endTurnCampaign = endTurn;
