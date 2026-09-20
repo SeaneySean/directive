@@ -116,8 +116,8 @@ isometric look. Missions add an objective tile and a "reach and hold" win condit
 | 2 | Strategic layer: regions, actions, treasury, exposure, turns, world screen | worker → critic | done 20 Sep |
 | 3 | Isometric renderer for missions | worker → critic | done 20 Sep |
 | 4 | Research tree and event cards | worker → critic | done 20 Sep |
-| 5 | Two missions wired from the world, objective tiles, rewards, endings | worker → critic | next |
-| 6 | Title screen, save/load, balance pass, mobile sizing, Loom, submit | conductor | |
+| 5 | Two missions wired from the world, objective tiles, rewards, endings | worker → critic | done 20 Sep |
+| 6 | Title screen, save/load, balance pass, mobile sizing, Loom, submit | conductor | next |
 
 Dates: slice 2 by 23 Sep, slice 3 by 25 Sep, slice 4 by 26 Sep, slice 5 by 28 Sep, ship 29 Sep.
 
@@ -126,6 +126,11 @@ Cut order if late: Atlantis becomes a second map on the Area 51 tileset; events 
 
 ## Balance notes for slice 6
 
+- Campaign random-policy win rate is 42.7% after slice 5 (target band 10 to 40%): mission
+  auto-wins, the artefact exposure reward and the plasma upgrade all help the player. Retune
+  alongside the AGI pacing. (Athena, 20 Sep, deferred from slice 5.)
+- `CAMPAIGN_REGISTRY_KEY` lives in `EndingScene.ts`; move it to a small shared module when
+  next touching the scene glue.
 - AGI route needs about 168 research points; at 8 base points per turn that is 15 to 20 turns
   against roughly 10 turns for a five-region win. Raise base points or lower late-node costs so
   the two routes finish within a few turns of each other. (Athena, 20 Sep, deferred from slice 4.)
