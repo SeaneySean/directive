@@ -115,14 +115,24 @@ isometric look. Missions add an objective tile and a "reach and hold" win condit
 | 1 | 2D tactical prototype | conductor | done |
 | 2 | Strategic layer: regions, actions, treasury, exposure, turns, world screen | worker → critic | done 20 Sep |
 | 3 | Isometric renderer for missions | worker → critic | done 20 Sep |
-| 4 | Research tree and event cards | worker → critic | next |
-| 5 | Two missions wired from the world, objective tiles, rewards, endings | worker → critic | |
+| 4 | Research tree and event cards | worker → critic | done 20 Sep |
+| 5 | Two missions wired from the world, objective tiles, rewards, endings | worker → critic | next |
 | 6 | Title screen, save/load, balance pass, mobile sizing, Loom, submit | conductor | |
 
 Dates: slice 2 by 23 Sep, slice 3 by 25 Sep, slice 4 by 26 Sep, slice 5 by 28 Sep, ship 29 Sep.
 
 Cut order if late: Atlantis becomes a second map on the Area 51 tileset; events drop to 3
 (Candidate, Leak, Whistleblower); Enlighten becomes a passive meter fed only by research.
+
+## Balance notes for slice 6
+
+- AGI route needs about 168 research points; at 8 base points per turn that is 15 to 20 turns
+  against roughly 10 turns for a five-region win. Raise base points or lower late-node costs so
+  the two routes finish within a few turns of each other. (Athena, 20 Sep, deferred from slice 4.)
+- Starting treasury of 400 against action costs of 8 to 16 means money never binds. (Deferred
+  from slice 2.)
+- Region meter labels are 8px; too small on a phone. Floor sprite chevrons and reach-highlight
+  contrast in the battle scene. (Deferred from slices 2 and 3.)
 
 ## Art direction
 
