@@ -11,7 +11,8 @@ export interface ResearchNode {
   grants: string[];
 }
 
-export const RESEARCH_BASE_POINTS = 8;
+export const RESEARCH_BASE_POINTS = 12;
+export const NEURAL_LACE_RESEARCH_BONUS = 4;
 export const RESEARCH_INCOME_DIVISOR = 4;
 export const AURICHALCUM_MULTIPLIER = 1.5;
 
@@ -37,11 +38,11 @@ export const RESEARCH: Readonly<Record<string, ResearchNode>> = {
     requires: [], grants: ['exact-meters'],
   },
   'cybernetics-2': {
-    id: 'cybernetics-2', name: 'Neural Lace', discipline: 'cybernetics', cost: 28,
+    id: 'cybernetics-2', name: 'Neural Lace', discipline: 'cybernetics', cost: 16,
     requires: ['cybernetics-1'], grants: ['bonus-agent'],
   },
   'cybernetics-3': {
-    id: 'cybernetics-3', name: 'AGI', discipline: 'cybernetics', cost: 48,
+    id: 'cybernetics-3', name: 'AGI', discipline: 'cybernetics', cost: 24,
     requires: ['cybernetics-2', 'mythology-3', 'aurichalcum'], grants: ['agi'],
   },
   'mythology-1': {
@@ -53,7 +54,7 @@ export const RESEARCH: Readonly<Record<string, ResearchNode>> = {
     requires: ['mythology-1'], grants: ['unlock-atlantis'],
   },
   'mythology-3': {
-    id: 'mythology-3', name: 'Aurichalcum Electronics', discipline: 'mythology', cost: 34,
+    id: 'mythology-3', name: 'Aurichalcum Electronics', discipline: 'mythology', cost: 16,
     requires: ['mythology-2'], grants: ['aurichalcum-electronics'],
   },
 } as const;
@@ -89,7 +90,9 @@ export function researchProgress(state: CampaignState): number {
   const heldIncome = state.regions
     .filter((region) => region.held || Object.values(region.meters).some((meter) => meter >= 100))
     .reduce((sum, region) => sum + region.wealth, 0);
-  const points = RESEARCH_BASE_POINTS + Math.floor(heldIncome / RESEARCH_INCOME_DIVISOR);
+  const points = RESEARCH_BASE_POINTS
+    + Math.floor(heldIncome / RESEARCH_INCOME_DIVISOR)
+    + (state.completedResearch.includes('cybernetics-2') ? NEURAL_LACE_RESEARCH_BONUS : 0);
   return state.completedResearch.includes('mythology-3')
     ? Math.floor(points * AURICHALCUM_MULTIPLIER)
     : points;

@@ -1,6 +1,6 @@
 import type { ActionDefinition, RegionDefinition } from './types.ts';
 
-export const STARTING_TREASURY = 400;
+export const STARTING_TREASURY = 160;
 
 export const REGIONS: readonly RegionDefinition[] = [
   { id: 'north-america', name: 'North America', resistance: 2, wealth: 10 },

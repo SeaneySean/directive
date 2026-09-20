@@ -6,7 +6,7 @@ import { pathTo, reachable } from './pathfinding.ts';
 import { nextRandom, rollPercent } from './rng.ts';
 import { AREA51_HANGAR, ATLANTIS_RUINS, FARMSTEAD } from './scenarios.ts';
 import { createGame, endTurn, livingUnits, moveUnit, selectUnit, shoot, unitById } from './state.ts';
-import { decide, runTeamTurn } from './ai.ts';
+import { decide, runTeamTurn, squadPolicy } from './ai.ts';
 import type { Scenario, Unit } from './types.ts';
 
 const small: Scenario = {
@@ -198,11 +198,33 @@ describe('state', () => {
 });
 
 describe('mission scenarios', () => {
-  test('Area 51 and Atlantis define distinct two-round objective maps', () => {
+  test('Area 51 and Atlantis use the fixed squad and enemy statistics', () => {
     expect(AREA51_HANGAR.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
     expect(ATLANTIS_RUINS.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
-    expect(AREA51_HANGAR.units.some((unit) => unit.team === 'alien' && unit.weapon.name === 'Rifle')).toBe(true);
-    expect(ATLANTIS_RUINS.units.some((unit) => unit.team === 'alien' && unit.name.includes('Guardian'))).toBe(true);
+    expect(AREA51_HANGAR.units.filter((unit) => unit.team === 'alien')).toHaveLength(3);
+    expect(ATLANTIS_RUINS.units.filter((unit) => unit.team === 'alien')).toHaveLength(4);
+    expect([...AREA51_HANGAR.units, ...ATLANTIS_RUINS.units]
+      .filter((unit) => unit.team === 'squad')
+      .every((unit) => unit.hp === 12 && unit.maxHp === 12)).toBe(true);
+    expect(AREA51_HANGAR.units.filter((unit) => unit.team === 'alien').every((unit) =>
+      unit.weapon.name === 'Rifle'
+      && unit.weapon.accuracy === 60
+      && unit.weapon.damage === 4
+      && unit.weapon.range === 7
+    )).toBe(true);
+    expect(ATLANTIS_RUINS.units.filter((unit) => unit.team === 'alien').every((unit) =>
+      unit.weapon.accuracy === 60
+    )).toBe(true);
+  });
+
+  test('campaign mission maps put cover behind the squad and along each objective route', () => {
+    for (const scenario of [AREA51_HANGAR, ATLANTIS_RUINS]) {
+      const squad = scenario.units.filter((unit) => unit.team === 'squad');
+      expect(squad.every((unit) => scenario.rows[unit.pos.y - 1]?.[unit.pos.x] === 'c')).toBe(true);
+      expect(scenario.objective!.tile.x).toBeGreaterThanOrEqual(6);
+      expect(scenario.objective!.tile.x).toBeLessThanOrEqual(11);
+      expect(scenario.objective!.tile.y).toBeLessThan(8);
+    }
   });
 });
 
@@ -227,5 +249,58 @@ describe('ai', () => {
       state = runTeamTurn(state, state.turn).state;
     }
     expect(state.outcome).not.toBe('playing');
+  });
+
+  test('smart squad shoots lowest HP, then higher chance, then unit id', () => {
+    const scenario: Scenario = {
+      name: 'targets',
+      rows: ['#######', '#.....#', '#.....#', '#.....#', '#######'],
+      units: [
+        { ...small.units[0]!, id: 's', pos: { x: 1, y: 2 } },
+        { ...small.units[1]!, id: 'z', pos: { x: 4, y: 2 }, hp: 3, maxHp: 8 },
+        { ...small.units[1]!, id: 'a', pos: { x: 3, y: 1 }, hp: 3, maxHp: 8 },
+        { ...small.units[1]!, id: 'low', pos: { x: 2, y: 3 }, hp: 2, maxHp: 8 },
+      ],
+    };
+    let state = createGame(scenario);
+    expect(squadPolicy(state, 's')).toMatchObject({ kind: 'shoot', targetId: 'low' });
+    state = { ...state, units: state.units.map((unit) => unit.id === 'low' ? { ...unit, alive: false } : unit) };
+    expect(squadPolicy(state, 's')).toMatchObject({ kind: 'shoot', targetId: 'a' });
+    state = { ...state, units: state.units.map((unit) => unit.id === 'z' ? { ...unit, pos: { x: 3, y: 3 } } : unit) };
+    expect(squadPolicy(state, 's')).toMatchObject({ kind: 'shoot', targetId: 'a' });
+  });
+
+  test('smart squad movement reduces path distance to the objective', () => {
+    const scenario: Scenario = {
+      name: 'objective',
+      rows: ['########', '#......#', '#.####.#', '#......#', '########'],
+      units: [
+        { ...small.units[0]!, id: 's', pos: { x: 1, y: 3 }, weapon: { ...small.units[0]!.weapon, range: 1 } },
+        { ...small.units[1]!, id: 'a', pos: { x: 6, y: 1 }, weapon: { ...small.units[1]!.weapon, range: 1 } },
+      ],
+      objective: { tile: { x: 5, y: 1 }, holdRounds: 2 },
+    };
+    expect(squadPolicy(createGame(scenario), 's')).toEqual({ kind: 'move', unitId: 's', to: { x: 2, y: 1 } });
+  });
+
+  test('smart squad prefers directional cover from the nearest enemy at equal objective distance', () => {
+    const scenario: Scenario = {
+      name: 'cover',
+      rows: ['#######', '#.....#', '#..c..#', '#.....#', '#.....#', '#######'],
+      units: [
+        { ...small.units[0]!, id: 's', pos: { x: 1, y: 3 }, move: 3, weapon: { ...small.units[0]!.weapon, range: 1 } },
+        { ...small.units[1]!, id: 'a', pos: { x: 3, y: 1 }, weapon: { ...small.units[1]!.weapon, range: 1 } },
+      ],
+      objective: { tile: { x: 5, y: 3 }, holdRounds: 2 },
+    };
+    expect(squadPolicy(createGame(scenario), 's')).toEqual({ kind: 'move', unitId: 's', to: { x: 3, y: 3 } });
+  });
+
+  test('runTeamTurn accepts a policy without changing its default', () => {
+    const state = createGame(small);
+    expect(runTeamTurn(state, 'squad')).toEqual(runTeamTurn(state, 'squad', decide));
+    const waited = runTeamTurn(state, 'squad', (_state, unitId) => ({ kind: 'wait', unitId }));
+    expect(waited.steps).toEqual([]);
+    expect(waited.state.turn).toBe('alien');
   });
 });

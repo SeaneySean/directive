@@ -29,6 +29,10 @@ function withMeter(
 }
 
 describe('campaign strategy rules', () => {
+  test('starts with the retuned treasury', () => {
+    expect(createCampaign(1).treasury).toBe(160);
+  });
+
   test('assignments are limited by available agents and one action per region', () => {
     let state = createCampaign(1);
     state = assignAction(state, REGIONS[0]!.id, 'buy-media');
