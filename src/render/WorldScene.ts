@@ -59,7 +59,7 @@ const MAP_BOXES: readonly MapBox[] = [
   { id: 'europe', x: 445, y: 135, width: 145, height: 95 },
   { id: 'middle-east', x: 620, y: 255, width: 145, height: 90 },
   { id: 'africa', x: 450, y: 300, width: 150, height: 175 },
-  { id: 'russia', x: 630, y: 105, width: 230, height: 110 },
+  { id: 'russia', x: 630, y: 114, width: 230, height: 101 },
   { id: 'asia', x: 790, y: 235, width: 180, height: 140 },
   { id: 'oceania', x: 800, y: 430, width: 165, height: 105 },
 ] as const;
@@ -157,7 +157,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawHelpButton(): void {
-    const help = this.track(this.add.text(945, 18, ' ? ', {
+    const help = this.track(this.add.text(566, 40, ' ? ', {
       fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37',
       padding: { x: 5, y: 3 },
     }));
@@ -257,19 +257,19 @@ export class WorldScene extends Phaser.Scene {
 
   private drawMissionsPanel(): void {
     const x = 610;
-    this.track(this.add.rectangle(785, 55, 350, 82, COLOURS.panel, 0.97))
+    this.track(this.add.rectangle(785, 74, 350, 74, COLOURS.panel, 0.97))
       .setStrokeStyle(1, COLOURS.outline);
-    this.text(x + 8, 20, 'MISSIONS', 12, '#d4af37');
+    this.text(x + 8, 42, 'MISSIONS', 12, '#d4af37');
     const available = new Set(availableMissions(this.state).map((mission) => mission.id));
     const listed = MISSIONS.filter((mission) =>
       available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
     );
     if (!listed.length) {
-      this.text(x + 8, 46, 'NO MISSIONS AVAILABLE', 11, '#596575');
+      this.text(x + 8, 64, 'NO MISSIONS AVAILABLE', 11, '#596575');
       return;
     }
     listed.forEach((mission, index) => {
-      const y = 43 + index * 27;
+      const y = 62 + index * 24;
       const complete = this.state.missions[mission.id]?.status === 'completed';
       this.text(
         x + 8,
