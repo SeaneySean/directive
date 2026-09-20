@@ -3,7 +3,7 @@
 //   bun run playtest [games=200] [scenario=Farmstead]
 //   bun run playtest --campaign [games=200]
 
-import { createGame, runTeamTurn, SCENARIOS } from '../src/game/index.ts';
+import { createGame, decide, runTeamTurn, SCENARIOS, squadPolicy, type AiPolicy } from '../src/game/index.ts';
 import { nextRandom } from '../src/game/rng.ts';
 import {
   assignAction,
@@ -17,7 +17,7 @@ import { RESEARCH, chooseResearch, isResearchAvailable } from '../src/game/strat
 import type { CampaignState } from '../src/game/strategy/types.ts';
 
 const pct = (count: number, total: number) => `${((100 * count) / total).toFixed(1)}%`;
-const MAX_CAMPAIGN_TURNS = 40;
+const MAX_CAMPAIGN_TURNS = 15;
 
 function randomIndex(seed: number, length: number): { index: number; seed: number } {
   const random = nextRandom(seed);
@@ -71,6 +71,63 @@ function completeAvailableMissions(state: CampaignState): CampaignState {
   return next;
 }
 
+function resolveDeterministicEvents(state: CampaignState): CampaignState {
+  let next = state;
+  while (pendingEvent(next)) {
+    const event = pendingEvent(next)!;
+    const preferred = event.id === 'candidate' || event.id === 'summit' ? 1 : 0;
+    const choice = event.choices[preferred];
+    next = resolveEvent(next, choice && (!choice.available || choice.available(next)) ? preferred : 0);
+  }
+  return next;
+}
+
+function assignFiveRegionActions(state: CampaignState): CampaignState {
+  let next = state;
+  for (const region of next.regions.filter((candidate) => !candidate.held).slice(0, 5)) {
+    if (Object.keys(next.assignments).length >= next.agents) break;
+    const actions = availableActions(next, region.id);
+    const actionId = actions.find((action) => action.id === 'fund-abundance')?.id ?? actions[0]?.id;
+    if (actionId) next = assignAction(next, region.id, actionId);
+  }
+  return next;
+}
+
+const AGI_CHAIN = [
+  'mythology-1',
+  'mythology-2',
+  'cybernetics-1',
+  'cybernetics-2',
+  'mythology-3',
+  'cybernetics-3',
+] as const;
+
+function chooseAgiResearch(state: CampaignState): CampaignState {
+  if (state.activeResearch) return state;
+  const next = AGI_CHAIN.find((nodeId) => isResearchAvailable(state, nodeId));
+  return next ? chooseResearch(state, next) : state;
+}
+
+function runRouteCampaign(seed: number, route: 'five-region' | 'agi'): CampaignState {
+  let state = createCampaign(seed);
+  while (state.outcome === 'playing' && state.turn <= MAX_CAMPAIGN_TURNS) {
+    state = resolveDeterministicEvents(state);
+    state = completeAvailableMissions(state);
+    state = route === 'agi' ? chooseAgiResearch(state) : assignFiveRegionActions(state);
+    state = resolveDeterministicEvents(state);
+    const next = endCampaignTurn(state);
+    if (next === state) throw new Error(`${route} campaign ${seed} stalled on turn ${state.turn}`);
+    state = next;
+  }
+  return state;
+}
+
+function routeLine(label: string, states: CampaignState[]): string {
+  const wins = states.filter((state) => state.outcome === 'won');
+  const mean = wins.reduce((sum, state) => sum + state.turn, 0) / wins.length;
+  return `${label}: won ${wins.length}/${states.length}  mean winning turn: ${mean.toFixed(1)}`;
+}
+
 function runCampaigns(games: number): void {
   let won = 0;
   let lost = 0;
@@ -97,8 +154,44 @@ function runCampaigns(games: number): void {
     turns += Math.min(MAX_CAMPAIGN_TURNS, state.turn - 1);
   }
 
-  console.log(`campaigns: ${games}  max turns: ${MAX_CAMPAIGN_TURNS}`);
-  console.log(`won: ${won} (${pct(won, games)})  lost: ${lost} (${pct(lost, games)})  stalled: ${stalled} (${pct(stalled, games)})  mean turns: ${(turns / games).toFixed(1)}`);
+  const fiveRegion = Array.from({ length: games }, (_, index) => runRouteCampaign(index + 1, 'five-region'));
+  const agi = Array.from({ length: games }, (_, index) => runRouteCampaign(index + 1, 'agi'));
+  console.log(routeLine('five-region policy', fiveRegion));
+  console.log(routeLine('AGI-priority policy', agi));
+  console.log(`random policy: won ${won}/${games} (${pct(won, games)})  lost ${lost} (${pct(lost, games)})  stalled ${stalled} (${pct(stalled, games)})  mean turns: ${(turns / games).toFixed(1)}`);
+}
+
+interface BattleResult {
+  won: number;
+  lost: number;
+  stalled: number;
+  rounds: number;
+  survivors: number;
+}
+
+function simulateBattles(
+  games: number,
+  scenario: (typeof SCENARIOS)[number],
+  squad: AiPolicy,
+): BattleResult {
+  const result: BattleResult = { won: 0, lost: 0, stalled: 0, rounds: 0, survivors: 0 };
+  for (let seed = 1; seed <= games; seed++) {
+    let state = createGame(scenario, seed);
+    for (let i = 0; i < 400 && state.outcome === 'playing'; i++) {
+      state = runTeamTurn(state, state.turn, state.turn === 'squad' ? squad : decide).state;
+    }
+    if (state.outcome === 'won') {
+      result.won++;
+      result.survivors += state.units.filter((unit) => unit.team === 'squad' && unit.alive).length;
+    } else if (state.outcome === 'lost') result.lost++;
+    else result.stalled++;
+    result.rounds += state.round;
+  }
+  return result;
+}
+
+function battleLine(label: string, result: BattleResult, games: number): string {
+  return `${label}: won ${result.won}/${games} (${pct(result.won, games)})  lost ${result.lost} (${pct(result.lost, games)})  stalled ${result.stalled}  avg rounds ${(result.rounds / games).toFixed(1)}  avg survivors ${result.won ? (result.survivors / result.won).toFixed(2) : '-'}`;
 }
 
 function runBattles(games: number, scenarioName: string): void {
@@ -107,29 +200,8 @@ function runBattles(games: number, scenarioName: string): void {
     console.error(`unknown scenario ${scenarioName}; have ${SCENARIOS.map((candidate) => candidate.name).join(', ')}`);
     process.exit(1);
   }
-
-  let won = 0;
-  let lost = 0;
-  let stalled = 0;
-  let rounds = 0;
-  let survivors = 0;
-
-  for (let seed = 1; seed <= games; seed++) {
-    let state = createGame(scenario, seed);
-    for (let i = 0; i < 400 && state.outcome === 'playing'; i++) {
-      state = runTeamTurn(state, state.turn).state;
-    }
-    if (state.outcome === 'won') {
-      won++;
-      survivors += state.units.filter((unit) => unit.team === 'squad' && unit.alive).length;
-    } else if (state.outcome === 'lost') lost++;
-    else stalled++;
-    rounds += state.round;
-  }
-
-  console.log(`scenario: ${scenario.name}  games: ${games}`);
-  console.log(`won: ${won} (${pct(won, games)})  lost: ${lost} (${pct(lost, games)})  stalled: ${stalled}`);
-  console.log(`avg rounds: ${(rounds / games).toFixed(1)}  avg survivors on win: ${won ? (survivors / won).toFixed(2) : '-'}`);
+  console.log(battleLine(`${scenario.name} baseline`, simulateBattles(games, scenario, decide), games));
+  console.log(battleLine(`${scenario.name} smart squad`, simulateBattles(games, scenario, squadPolicy), games));
 }
 
 const campaignFlag = process.argv.indexOf('--campaign');

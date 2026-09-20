@@ -22,7 +22,8 @@ import {
 } from '../game/index.ts';
 import { completeMission, missionScenario, type MissionId } from '../game/strategy/missions.ts';
 import type { CampaignState } from '../game/strategy/types.ts';
-import { CAMPAIGN_REGISTRY_KEY } from './EndingScene.ts';
+import { MISSION_TEXT } from '../game/strategy/text.ts';
+import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
 import { gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
 
 export { TILE_H, TILE_W } from './iso.ts';
@@ -54,6 +55,7 @@ export class BattleScene extends Phaser.Scene {
   private tooltip!: Phaser.GameObjects.Text;
   private endTurnBtn!: Phaser.GameObjects.Text;
   private banner!: Phaser.GameObjects.Text;
+  private hint!: Phaser.GameObjects.Text;
   private reach: Reach | null = null;
   private busy = false;
   private returning = false;
@@ -101,7 +103,15 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(9002)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.onEndTurn());
-    this.logText = this.add.text(PANEL_X + 16, 420, '', {
+    this.hint = this.add.text(PANEL_X + 16, 412, '', {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      color: '#fff1bd',
+      backgroundColor: '#2b2413',
+      padding: { x: 6, y: 5 },
+      wordWrap: { width: PANEL_W - 44 },
+    }).setDepth(9002);
+    this.logText = this.add.text(PANEL_X + 16, 470, '', {
       fontFamily: 'monospace',
       fontSize: '12px',
       color: '#b8b8b8',
@@ -170,11 +180,50 @@ export class BattleScene extends Phaser.Scene {
     if (!this.missionId || this.returning) return;
     this.returning = true;
     const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
-    this.registry.set(
-      CAMPAIGN_REGISTRY_KEY,
-      completeMission(campaign, this.missionId, result),
-    );
-    this.time.delayedCall(900, () => this.scene.start('world'));
+    const next = completeMission(campaign, this.missionId, result);
+    this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
+    writeCampaignSave(next);
+    this.time.delayedCall(900, () => this.showDebrief(result, campaign, next));
+  }
+
+  private showDebrief(result: 'won' | 'lost', before: CampaignState, after: CampaignState): void {
+    const copy = this.missionId ? MISSION_TEXT[this.missionId] : undefined;
+    const squad = this.state.units.filter((unit) => unit.team === 'squad');
+    const fallen = squad.filter((unit) => !unit.alive).map((unit) => unit.name);
+    const gained = after.items.filter((item) => !before.items.includes(item));
+    const exposureDelta = after.exposure - before.exposure;
+    const lines = [
+      result === 'won' ? 'MISSION COMPLETE' : 'MISSION FAILED',
+      '',
+      result === 'won'
+        ? `Gained: ${gained.length ? gained.join(', ') : 'nothing new'}${exposureDelta ? `, Exposure ${exposureDelta > 0 ? '+' : ''}${exposureDelta}` : ''}`
+        : `Lost 20 treasury (now ${after.treasury}). You can retry next turn.`,
+      copy && result === 'won' ? `Reward: ${copy.reward}` : '',
+      `Casualties: ${fallen.length ? fallen.join(', ') : 'none'}`,
+      `Survivors: ${squad.length - fallen.length} of ${squad.length}`,
+    ].filter((line, index) => line !== '' || index === 1);
+    this.banner.setVisible(false);
+    this.add.rectangle(BOARD_ORIGIN.x, 360, 620, 330, 0x090d13, 0.97).setStrokeStyle(2, 0xd4af37).setDepth(10010);
+    this.add.text(BOARD_ORIGIN.x, 300, lines, {
+      fontFamily: 'monospace', fontSize: '17px', color: result === 'won' ? '#f6e6a8' : '#e7edf5', align: 'center', lineSpacing: 8,
+    }).setOrigin(0.5).setDepth(10011);
+    this.add.text(BOARD_ORIGIN.x, 470, ' RETURN TO WORLD ', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37', padding: { x: 10, y: 7 },
+    }).setOrigin(0.5).setDepth(10011).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('world'));
+  }
+
+  private hintText(): string {
+    const state = this.state;
+    if (state.outcome !== 'playing') return '';
+    if (state.turn !== 'squad') return 'Enemy turn.';
+    const sel = selectedUnit(state);
+    if (!sel) return 'Select a soldier.';
+    if (state.objective) {
+      const onTile = livingUnits(state, 'squad').some((unit) => unit.pos.x === state.objective!.tile.x && unit.pos.y === state.objective!.tile.y);
+      if (onTile) return `Objective: hold the gold tile for ${state.objective.holdRounds} of your turns (${state.objectiveHoldRounds}/${state.objective.holdRounds}). Keep someone on it and END TURN.`;
+    }
+    if (sel.ap === 2) return 'Green tiles: move (1 AP). Hover an enemy for hit chance, click to shoot (1 AP).';
+    return 'Stand next to a crate for cover: enemies hit you 30% less. E ends your turn.';
   }
 
   private autoSelect(): void {
@@ -390,7 +439,7 @@ export class BattleScene extends Phaser.Scene {
     const sel = selectedUnit(state);
     const lines = [`ILLUMINATUS  //  ${this.scenario.name.toUpperCase()}`, `Round ${state.round}   ${state.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
     if (state.objective) {
-      lines.push(`Objective hold: ${state.objectiveHoldRounds}/${state.objective.holdRounds}`, '');
+      lines.push('Reach the gold tile and hold it', `Hold: ${state.objectiveHoldRounds}/${state.objective.holdRounds} turns  or kill all enemies`, '');
     }
     if (sel) {
       lines.push(
@@ -405,12 +454,13 @@ export class BattleScene extends Phaser.Scene {
     for (const unit of state.units.filter((candidate) => candidate.team === 'squad')) {
       lines.push(`  ${unit.alive ? '' : 'x '}${unit.name.padEnd(7)} HP ${String(unit.hp).padStart(2)}  AP ${unit.ap}`);
     }
-    lines.push('', `Aliens left: ${livingUnits(state, 'alien').length}`, '', 'Click unit: select', 'Click tile: move', 'Click alien: shoot', 'Tab: next unit');
+    lines.push('', `Enemies left: ${livingUnits(state, 'alien').length}`);
     this.panel.setText(lines);
+    this.hint.setText(this.hintText()).setVisible(this.hintText() !== '');
     this.logText.setText(state.log.slice(-9).map((entry) => entry.text));
 
     if (state.outcome !== 'playing') {
-      const suffix = this.missionId ? '\n\nRETURNING TO WORLD' : '\n\nR to restart';
+      const suffix = this.missionId ? '' : '\n\nR to restart';
       this.banner.setText(`${state.outcome === 'won' ? 'AREA SECURED' : 'SQUAD LOST'}${suffix}`).setVisible(true);
       this.endTurnBtn.setVisible(false);
     } else {

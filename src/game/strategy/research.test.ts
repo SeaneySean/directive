@@ -78,12 +78,13 @@ describe('research tree', () => {
 
   test('research income uses base, held wealth, and the Aurichalcum multiplier', () => {
     const base = createCampaign(5);
-    expect(researchProgress(base)).toBe(8);
+    expect(researchProgress(base)).toBe(12);
 
     const regions = base.regions.map((region, index) => index < 2 ? { ...region, held: true } : region);
     const wealthy = { ...base, regions };
     expect(heldRegions(wealthy)).toHaveLength(2);
-    expect(researchProgress(wealthy)).toBe(12);
-    expect(researchProgress({ ...wealthy, completedResearch: ['mythology-3'] })).toBe(18);
+    expect(researchProgress(wealthy)).toBe(16);
+    expect(researchProgress({ ...wealthy, completedResearch: ['cybernetics-2'] })).toBe(20);
+    expect(researchProgress({ ...wealthy, completedResearch: ['cybernetics-2', 'mythology-3'] })).toBe(30);
   });
 });

@@ -14,8 +14,18 @@ import { ACTIONS } from '../game/strategy/data.ts';
 import { pendingEvent, resolveEvent } from '../game/strategy/events.ts';
 import { MISSIONS, availableMissions, startMission } from '../game/strategy/missions.ts';
 import { RESEARCH, chooseResearch, isResearchAvailable } from '../game/strategy/research.ts';
+import {
+  ACTION_TEXT,
+  EVENT_CHOICE_TEXT,
+  EVENT_CONTEXT,
+  MISSION_TEXT,
+  RESEARCH_TEXT,
+  guideText,
+  regionDescription,
+} from '../game/strategy/text.ts';
 import type { CampaignState, InfluencePath, RegionState } from '../game/strategy/types.ts';
-import { CAMPAIGN_REGISTRY_KEY } from './EndingScene.ts';
+import { showHelpOverlay } from './HelpOverlay.ts';
+import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -49,7 +59,7 @@ const MAP_BOXES: readonly MapBox[] = [
   { id: 'europe', x: 445, y: 135, width: 145, height: 95 },
   { id: 'middle-east', x: 620, y: 255, width: 145, height: 90 },
   { id: 'africa', x: 450, y: 300, width: 150, height: 175 },
-  { id: 'russia', x: 630, y: 105, width: 230, height: 110 },
+  { id: 'russia', x: 630, y: 114, width: 230, height: 101 },
   { id: 'asia', x: 790, y: 235, width: 180, height: 140 },
   { id: 'oceania', x: 800, y: 430, width: 165, height: 105 },
 ] as const;
@@ -64,6 +74,8 @@ export class WorldScene extends Phaser.Scene {
   private state!: CampaignState;
   private selectedRegionId: string | null = null;
   private objects: Phaser.GameObjects.GameObject[] = [];
+  private hoverText!: Phaser.GameObjects.Text;
+  private dismissedGuideTurns = new Set<number>();
 
   constructor() {
     super('world');
@@ -73,11 +85,12 @@ export class WorldScene extends Phaser.Scene {
     this.state = (this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState | undefined)
       ?? createCampaign(Date.now() | 0);
     this.registry.set(CAMPAIGN_REGISTRY_KEY, this.state);
+    writeCampaignSave(this.state);
     this.cameras.main.setBackgroundColor(COLOURS.background);
     this.redraw();
   }
 
-  private track<T extends Phaser.GameObjects.GameObject>(object: T): T {
+  private track<T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth>(object: T): T {
     this.objects.push(object);
     return object;
   }
@@ -98,6 +111,7 @@ export class WorldScene extends Phaser.Scene {
 
   private redraw(): void {
     this.registry.set(CAMPAIGN_REGISTRY_KEY, this.state);
+    writeCampaignSave(this.state);
     if (this.state.outcome !== 'playing') {
       this.scene.start('ending');
       return;
@@ -109,8 +123,13 @@ export class WorldScene extends Phaser.Scene {
     graphics.fillStyle(COLOURS.panel, 1).fillRect(PANEL_X, 0, WIDTH - PANEL_X, HEIGHT);
     graphics.lineStyle(1, COLOURS.outline, 1).lineBetween(PANEL_X, 0, PANEL_X, HEIGHT);
 
-    this.text(34, 24, 'ILLUMINATUS // WORLD CONTROL', 24, '#d4af37');
-    this.text(35, 56, 'ASSIGN OPERATIVES. SHAPE THE WORLD. STAY HIDDEN.', 12, '#718096');
+    this.text(34, 42, 'ILLUMINATUS // WORLD CONTROL', 24, '#d4af37');
+    this.text(35, 74, 'ASSIGN OPERATIVES. SHAPE THE WORLD. STAY HIDDEN.', 12, '#718096');
+    this.hoverText = this.track(this.add.text(0, 0, '', {
+      fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
+      backgroundColor: '#05070aee', padding: { x: 7, y: 5 },
+      wordWrap: { width: 360 },
+    })).setDepth(15_000).setVisible(false);
 
     for (const box of MAP_BOXES) {
       const region = this.state.regions.find((candidate) => candidate.id === box.id)!;
@@ -120,7 +139,47 @@ export class WorldScene extends Phaser.Scene {
     this.drawPanel(graphics);
     this.drawMissionsPanel();
     this.drawResearchPanel();
+    this.drawHelpButton();
+    this.drawGuide();
     if (pendingEvent(this.state)) this.drawEventModal();
+  }
+
+  private attachHover(object: Phaser.GameObjects.GameObject, copy: string): void {
+    object.on('pointerover', (pointer: Phaser.Input.Pointer) => {
+      this.hoverText.setText(copy)
+        .setPosition(Math.min(pointer.x + 12, WIDTH - 380), Math.min(pointer.y + 12, HEIGHT - 90))
+        .setVisible(true);
+    });
+    object.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      this.hoverText.setPosition(Math.min(pointer.x + 12, WIDTH - 380), Math.min(pointer.y + 12, HEIGHT - 90));
+    });
+    object.on('pointerout', () => this.hoverText.setVisible(false));
+  }
+
+  private drawHelpButton(): void {
+    const help = this.track(this.add.text(566, 40, ' ? ', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37',
+      padding: { x: 5, y: 3 },
+    }));
+    help.setInteractive({ useHandCursor: true }).on('pointerdown', () => showHelpOverlay(this));
+  }
+
+  private drawGuide(): void {
+    const copy = guideText(this.state.turn);
+    if (!copy || this.dismissedGuideTurns.has(this.state.turn)) return;
+    const strip = this.track(this.add.rectangle(WIDTH / 2, 16, WIDTH, 32, 0x2b2413, 1))
+      .setStrokeStyle(1, COLOURS.subvert).setDepth(2000);
+    const label = this.text(26, 6, copy, 14, '#fff1bd').setDepth(2001);
+    const close = this.track(this.add.text(1230, 4, ' X ', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#0d1117', backgroundColor: '#d4af37',
+      padding: { x: 4, y: 2 },
+    })).setDepth(2001);
+    close.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.dismissedGuideTurns.add(this.state.turn);
+      strip.destroy();
+      label.destroy();
+      close.destroy();
+    });
   }
 
   private drawRegion(graphics: Phaser.GameObjects.Graphics, box: MapBox, region: RegionState): void {
@@ -138,8 +197,10 @@ export class WorldScene extends Phaser.Scene {
       0xffffff,
       0.001,
     ));
+    hitArea.setInteractive({ useHandCursor: true });
+    this.attachHover(hitArea, `${region.name}: ${regionDescription(region)}`);
     if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
-      hitArea.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      hitArea.on('pointerdown', () => {
         this.selectedRegionId = region.id;
         this.redraw();
       });
@@ -196,19 +257,19 @@ export class WorldScene extends Phaser.Scene {
 
   private drawMissionsPanel(): void {
     const x = 610;
-    this.track(this.add.rectangle(785, 55, 350, 82, COLOURS.panel, 0.97))
+    this.track(this.add.rectangle(785, 74, 350, 74, COLOURS.panel, 0.97))
       .setStrokeStyle(1, COLOURS.outline);
-    this.text(x + 8, 20, 'MISSIONS', 12, '#d4af37');
+    this.text(x + 8, 42, 'MISSIONS', 12, '#d4af37');
     const available = new Set(availableMissions(this.state).map((mission) => mission.id));
     const listed = MISSIONS.filter((mission) =>
       available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
     );
     if (!listed.length) {
-      this.text(x + 8, 46, 'NO MISSIONS AVAILABLE', 11, '#596575');
+      this.text(x + 8, 64, 'NO MISSIONS AVAILABLE', 11, '#596575');
       return;
     }
     listed.forEach((mission, index) => {
-      const y = 43 + index * 27;
+      const y = 62 + index * 24;
       const complete = this.state.missions[mission.id]?.status === 'completed';
       this.text(
         x + 8,
@@ -227,14 +288,60 @@ export class WorldScene extends Phaser.Scene {
         }));
         if (!pendingEvent(this.state)) {
           launch.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            const next = startMission(this.state, mission.id);
-            if (next === this.state) return;
-            this.state = next;
-            this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
-            this.scene.start('battle', { missionId: mission.id });
+            this.drawMissionBriefing(
+              mission.id,
+              mission.name,
+              mission.scenario.units.filter((unit) => unit.team === 'alien').length,
+            );
           });
         }
       }
+    });
+  }
+
+  private drawMissionBriefing(missionId: 'area-51' | 'atlantis', missionName: string, enemyCount: number): void {
+    const copy = MISSION_TEXT[missionId]!;
+    const objects: Phaser.GameObjects.GameObject[] = [];
+    const add = <T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth>(object: T): T => {
+      object.setDepth(18_000);
+      objects.push(object);
+      return object;
+    };
+    add(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x030507, 0.9)).setInteractive();
+    add(this.add.rectangle(640, 360, 760, 520, COLOURS.panel, 1)).setStrokeStyle(2, COLOURS.subvert);
+    add(this.add.text(310, 125, `MISSION BRIEFING // ${missionName.toUpperCase()}`, {
+      fontFamily: 'monospace', fontSize: '23px', color: '#d4af37',
+    }));
+    add(this.add.text(310, 180, copy.why, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#e7edf5', wordWrap: { width: 660 },
+    }));
+    add(this.add.text(310, 270, [
+      `OBJECTIVE: ${copy.objective}`,
+      '',
+      'WIN: Hold the objective for 2 squad turns.',
+      'OR: Eliminate every enemy.',
+      '',
+      `ENEMIES: ${enemyCount}`,
+      `REWARD: ${copy.reward}`,
+    ], {
+      fontFamily: 'monospace', fontSize: '16px', color: '#aeb9c7', lineSpacing: 8,
+    }));
+    const back = add(this.add.text(385, 540, ' BACK ', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#8795a8',
+      padding: { x: 10, y: 7 },
+    })).setInteractive({ useHandCursor: true });
+    back.on('pointerdown', () => objects.forEach((object) => object.destroy()));
+    const go = add(this.add.text(785, 540, ' GO ', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#0d1117', backgroundColor: '#d4af37',
+      padding: { x: 10, y: 7 },
+    })).setInteractive({ useHandCursor: true });
+    go.on('pointerdown', () => {
+      const next = startMission(this.state, missionId);
+      if (next === this.state) return;
+      this.state = next;
+      this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
+      writeCampaignSave(next);
+      this.scene.start('battle', { missionId });
     });
   }
 
@@ -273,8 +380,10 @@ export class WorldScene extends Phaser.Scene {
         padding: { x: 6, y: 5 },
         fixedWidth: 240,
       }));
+      label.setInteractive({ useHandCursor: available });
+      this.attachHover(label, ACTION_TEXT[action.id]!);
       if (available && !pendingEvent(this.state) && isActionAvailable(this.state, region.id, action.id)) {
-        label.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        label.on('pointerdown', () => {
           this.state = assignAction(this.state, region.id, action.id);
           this.redraw();
         });
@@ -315,8 +424,10 @@ export class WorldScene extends Phaser.Scene {
           padding: { x: 5, y: 3 },
           fixedWidth: 218,
         }));
+        card.setInteractive({ useHandCursor: available });
+        this.attachHover(card, `${node.name}: ${RESEARCH_TEXT[node.id] ?? ''}`);
         if (available && !pendingEvent(this.state)) {
-          card.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          card.on('pointerdown', () => {
             this.state = chooseResearch(this.state, node.id);
             this.redraw();
           });
@@ -330,14 +441,16 @@ export class WorldScene extends Phaser.Scene {
     if (!event) return;
     this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x05070a, 0.82))
       .setInteractive();
-    this.track(this.add.rectangle(640, 360, 610, 350, COLOURS.panel, 1))
+    this.track(this.add.rectangle(640, 360, 680, 440, COLOURS.panel, 1))
       .setStrokeStyle(2, COLOURS.exposure);
-    this.text(375, 220, 'EVENT', 12, '#c98cf2');
-    this.text(375, 250, event.name.toUpperCase(), 26, '#ffffff');
-    this.text(375, 300, event.description, 14, '#aeb9c7').setWordWrapWidth(530);
+    this.text(340, 165, 'EVENT', 12, '#c98cf2');
+    this.text(340, 190, event.name.toUpperCase(), 26, '#ffffff');
+    this.text(340, 236, event.description, 14, '#d4af37').setWordWrapWidth(600);
+    this.text(340, 268, EVENT_CONTEXT[event.id] ?? '', 14, '#aeb9c7').setWordWrapWidth(600);
+    const labels = EVENT_CHOICE_TEXT[event.id] ?? [];
     event.choices.forEach((choice, index) => {
       const available = !choice.available || choice.available(this.state);
-      const button = this.track(this.add.text(375, 375 + index * 65, ` ${choice.label.toUpperCase()} `, {
+      const button = this.track(this.add.text(340, 400 + index * 62, ` ${(labels[index] ?? choice.label).toUpperCase()} `, {
         fontFamily: 'monospace',
         fontSize: '15px',
         color: available ? '#0d1117' : '#596575',

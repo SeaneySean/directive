@@ -1,9 +1,7 @@
 import Phaser from 'phaser';
-import { createCampaign } from '../game/strategy/campaign.ts';
 import { ENDINGS } from '../game/strategy/endings.ts';
 import type { CampaignState } from '../game/strategy/types.ts';
-
-export const CAMPAIGN_REGISTRY_KEY = 'campaign-state';
+import { CAMPAIGN_REGISTRY_KEY } from './sceneGlue.ts';
 
 export class EndingScene extends Phaser.Scene {
   constructor() {
@@ -30,7 +28,7 @@ export class EndingScene extends Phaser.Scene {
       lineSpacing: 9,
     }).setOrigin(0.5);
 
-    const newGame = this.add.text(640, 420, ' NEW GAME ', {
+    const newGame = this.add.text(640, 420, ' MAIN MENU ', {
       fontFamily: 'monospace',
       fontSize: '20px',
       color: '#0d1117',
@@ -38,8 +36,7 @@ export class EndingScene extends Phaser.Scene {
       padding: { x: 14, y: 9 },
     }).setOrigin(0.5);
     newGame.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      this.registry.set(CAMPAIGN_REGISTRY_KEY, createCampaign(Date.now() | 0));
-      this.scene.start('world');
+      this.scene.start('title');
     });
   }
 }
