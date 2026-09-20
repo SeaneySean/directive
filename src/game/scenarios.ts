@@ -80,9 +80,9 @@ export const AREA51_HANGAR: Scenario = {
   ],
   units: [
     ...MISSION_SQUAD,
-    alien('g1', 'Guard', 3, 8, GUARD_RIFLE, 38),
-    alien('g2', 'Guard', 5, 8, GUARD_RIFLE, 38),
-    alien('g3', 'Guard', 12, 8, GUARD_RIFLE, 38),
+    alien('g1', 'Guard', 3, 8, GUARD_RIFLE, 20),
+    alien('g2', 'Guard', 5, 8, GUARD_RIFLE, 20),
+    alien('g3', 'Guard', 12, 8, GUARD_RIFLE, 20),
   ],
   objective: { tile: { x: 8, y: 4 }, holdRounds: 2 },
 };
@@ -109,10 +109,10 @@ export const ATLANTIS_RUINS: Scenario = {
   ],
   units: [
     ...MISSION_SQUAD,
-    alien('u1', 'Guardian Alpha', 3, 8, GUARDIAN_WEAPON, 40),
-    alien('u2', 'Guardian Beta', 7, 8, GUARDIAN_WEAPON, 40),
-    alien('u3', 'Guardian Gamma', 11, 8, GUARDIAN_WEAPON, 40),
-    alien('u4', 'Guardian Delta', 10, 5, GUARDIAN_WEAPON, 40),
+    alien('u1', 'Guardian Alpha', 3, 8, GUARDIAN_WEAPON, 22),
+    alien('u2', 'Guardian Beta', 7, 8, GUARDIAN_WEAPON, 22),
+    alien('u3', 'Guardian Gamma', 11, 8, GUARDIAN_WEAPON, 22),
+    alien('u4', 'Guardian Delta', 10, 5, GUARDIAN_WEAPON, 22),
   ],
   objective: { tile: { x: 8, y: 4 }, holdRounds: 2 },
 };
