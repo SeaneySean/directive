@@ -113,8 +113,8 @@ isometric look. Missions add an objective tile and a "reach and hold" win condit
 |---|---|---|---|
 | 0 | Scaffold, deploy, docs | conductor | done |
 | 1 | 2D tactical prototype | conductor | done |
-| 2 | Strategic layer: regions, actions, treasury, exposure, turns, world screen | worker → critic | next |
-| 3 | Isometric renderer for missions | worker → critic | |
+| 2 | Strategic layer: regions, actions, treasury, exposure, turns, world screen | worker → critic | done 20 Sep |
+| 3 | Isometric renderer for missions | worker → critic | next |
 | 4 | Research tree and event cards | worker → critic | |
 | 5 | Two missions wired from the world, objective tiles, rewards, endings | worker → critic | |
 | 6 | Title screen, save/load, balance pass, mobile sizing, Loom, submit | conductor | |
