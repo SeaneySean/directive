@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  actionCost,
   assignAction,
   availableActions,
   clearAction,
@@ -7,8 +8,11 @@ import {
   endTurn,
   heldRegions,
   isActionAvailable,
+  visibleMeter,
 } from '../game/strategy/campaign.ts';
 import { ACTIONS } from '../game/strategy/data.ts';
+import { pendingEvent, resolveEvent } from '../game/strategy/events.ts';
+import { RESEARCH, chooseResearch, isResearchAvailable } from '../game/strategy/research.ts';
 import type { CampaignState, InfluencePath, RegionState } from '../game/strategy/types.ts';
 
 const WIDTH = 1280;
@@ -105,7 +109,12 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.drawPanel(graphics);
-    if (this.state.outcome !== 'playing') this.drawEnding(graphics);
+    if (this.state.outcome === 'playing') {
+      this.drawResearchPanel();
+      if (pendingEvent(this.state)) this.drawEventModal();
+    } else {
+      this.drawEnding(graphics);
+    }
   }
 
   private drawRegion(graphics: Phaser.GameObjects.Graphics, box: MapBox, region: RegionState): void {
@@ -123,7 +132,7 @@ export class WorldScene extends Phaser.Scene {
       0xffffff,
       0.001,
     ));
-    if (this.state.outcome === 'playing') {
+    if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
       hitArea.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         this.selectedRegionId = region.id;
         this.redraw();
@@ -140,9 +149,10 @@ export class WorldScene extends Phaser.Scene {
     const barStart = box.y + box.height - 42;
     (['subvert', 'force', 'enlighten'] as const).forEach((path, index) => {
       const y = barStart + index * 12;
+      const shown = visibleMeter(this.state, region.meters[path]);
       graphics.fillStyle(COLOURS.empty, 1).fillRect(barX, y, barWidth, 7);
-      graphics.fillStyle(PATH_COLOUR[path], 1).fillRect(barX, y, barWidth * region.meters[path] / 100, 7);
-      this.text(barX + 2, y - 2, `${path[0]!.toUpperCase()} ${Math.round(region.meters[path])}`, 8, '#ffffff');
+      graphics.fillStyle(PATH_COLOUR[path], 1).fillRect(barX, y, barWidth * shown / 100, 7);
+      this.text(barX + 2, y - 2, `${path[0]!.toUpperCase()} ${Math.round(shown)}`, 8, '#ffffff');
     });
   }
 
@@ -170,7 +180,7 @@ export class WorldScene extends Phaser.Scene {
       backgroundColor: '#d4af37',
       padding: { x: 8, y: 8 },
     }));
-    if (this.state.outcome === 'playing') {
+    if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
       endTurn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         this.state = endTurnCampaign(this.state);
         this.redraw();
@@ -192,10 +202,12 @@ export class WorldScene extends Phaser.Scene {
         backgroundColor: '#5b2730',
         padding: { x: 5, y: 5 },
       }));
-      clear.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-        this.state = clearAction(this.state, region.id);
-        this.redraw();
-      });
+      if (!pendingEvent(this.state)) {
+        clear.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          this.state = clearAction(this.state, region.id);
+          this.redraw();
+        });
+      }
       return;
     }
 
@@ -203,7 +215,7 @@ export class WorldScene extends Phaser.Scene {
     Object.values(ACTIONS).forEach((action, index) => {
       const y = 252 + index * 52;
       const available = legal.has(action.id);
-      const label = this.track(this.add.text(PANEL_X + 20, y, `${action.name.toUpperCase()}  £${action.cost}\n${this.effectLabel(action.id)}`, {
+      const label = this.track(this.add.text(PANEL_X + 20, y, `${action.name.toUpperCase()}  £${actionCost(this.state, action)}\n${this.effectLabel(action.id)}`, {
         fontFamily: 'monospace',
         fontSize: '11px',
         color: available ? '#e9eef5' : '#596575',
@@ -211,7 +223,7 @@ export class WorldScene extends Phaser.Scene {
         padding: { x: 6, y: 5 },
         fixedWidth: 240,
       }));
-      if (available && isActionAvailable(this.state, region.id, action.id)) {
+      if (available && !pendingEvent(this.state) && isActionAvailable(this.state, region.id, action.id)) {
         label.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
           this.state = assignAction(this.state, region.id, action.id);
           this.redraw();
@@ -222,10 +234,73 @@ export class WorldScene extends Phaser.Scene {
 
   private effectLabel(actionId: string): string {
     const action = ACTIONS[actionId]!;
-    if (action.requires) return `LOCKED: ${action.requires.toUpperCase()}`;
+    if (action.requires && !this.state.completedResearch.includes(action.requires)) {
+      return `LOCKED: ${action.requires.toUpperCase()}`;
+    }
     const effects = Object.entries(action.effects).map(([path, value]) => `+${value} ${path[0]!.toUpperCase()}`);
     const exposure = action.exposure === 0 ? 'NO EXP' : `${action.exposure > 0 ? '+' : ''}${action.exposure} EXP`;
     return [...effects, exposure].join('  ');
+  }
+
+  private drawResearchPanel(): void {
+    const panelY = 545;
+    this.track(this.add.rectangle(500, panelY + 82.5, 960, 165, COLOURS.panel, 0.97))
+      .setStrokeStyle(1, COLOURS.outline);
+    this.text(32, panelY + 8, 'RESEARCH', 14, '#c98cf2');
+
+    const disciplines = ['psychology', 'weaponry', 'cybernetics', 'mythology'] as const;
+    disciplines.forEach((discipline, column) => {
+      const x = 32 + column * 237;
+      this.text(x, panelY + 31, discipline.toUpperCase(), 11, '#8795a8');
+      Object.values(RESEARCH).filter((node) => node.discipline === discipline).forEach((node, index) => {
+        const active = this.state.activeResearch === node.id;
+        const complete = this.state.completedResearch.includes(node.id);
+        const available = isResearchAvailable(this.state, node.id);
+        const status = complete ? 'DONE' : active ? `${this.state.researchPoints}/${node.cost}` : available ? `${node.cost} RP` : 'LOCKED';
+        const card = this.track(this.add.text(x, panelY + 51 + index * 34, `${node.name.toUpperCase()}\n${status}`, {
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          color: complete ? '#75d69c' : active ? '#ffffff' : available ? '#e9eef5' : '#596575',
+          backgroundColor: active ? '#68418a' : '#202936',
+          padding: { x: 5, y: 3 },
+          fixedWidth: 218,
+        }));
+        if (available && !pendingEvent(this.state)) {
+          card.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+            this.state = chooseResearch(this.state, node.id);
+            this.redraw();
+          });
+        }
+      });
+    });
+  }
+
+  private drawEventModal(): void {
+    const event = pendingEvent(this.state);
+    if (!event) return;
+    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x05070a, 0.82))
+      .setInteractive();
+    this.track(this.add.rectangle(640, 360, 610, 350, COLOURS.panel, 1))
+      .setStrokeStyle(2, COLOURS.exposure);
+    this.text(375, 220, 'EVENT', 12, '#c98cf2');
+    this.text(375, 250, event.name.toUpperCase(), 26, '#ffffff');
+    this.text(375, 300, event.description, 14, '#aeb9c7').setWordWrapWidth(530);
+    event.choices.forEach((choice, index) => {
+      const available = !choice.available || choice.available(this.state);
+      const button = this.track(this.add.text(375, 375 + index * 65, ` ${choice.label.toUpperCase()} `, {
+        fontFamily: 'monospace',
+        fontSize: '15px',
+        color: available ? '#0d1117' : '#596575',
+        backgroundColor: available ? '#d4af37' : '#202936',
+        padding: { x: 8, y: 8 },
+      }));
+      if (available) {
+        button.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          this.state = resolveEvent(this.state, index);
+          this.redraw();
+        });
+      }
+    });
   }
 
   private drawEnding(graphics: Phaser.GameObjects.Graphics): void {

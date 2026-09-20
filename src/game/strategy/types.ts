@@ -2,6 +2,7 @@ export const PATHS = ['subvert', 'force', 'enlighten'] as const;
 
 export type InfluencePath = (typeof PATHS)[number];
 export type CampaignOutcome = 'playing' | 'won' | 'lost';
+export type EndingId = 'exposed' | 'machine-ascends' | 'quiet-throne' | 'pax-illuminata' | 'long-dawn';
 
 export interface InfluenceMeters {
   subvert: number;
@@ -41,5 +42,14 @@ export interface CampaignState {
   agents: number;
   regions: RegionState[];
   assignments: Record<string, string>;
+  activeResearch: string | null;
+  researchPoints: number;
+  completedResearch: string[];
+  items: string[];
+  flags: string[];
+  firedEvents: string[];
+  unlockedMissions: string[];
+  bonusAgents: number;
   outcome: CampaignOutcome;
+  endingId: EndingId | null;
 }

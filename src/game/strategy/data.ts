@@ -13,6 +13,17 @@ export const REGIONS: readonly RegionDefinition[] = [
   { id: 'oceania', name: 'Oceania', resistance: 1, wealth: 6 },
 ] as const;
 
+export const REGION_NEIGHBOURS: Readonly<Record<string, readonly [string, string]>> = {
+  'north-america': ['south-america', 'europe'],
+  'south-america': ['north-america', 'africa'],
+  europe: ['russia', 'middle-east'],
+  'middle-east': ['europe', 'asia'],
+  africa: ['south-america', 'middle-east'],
+  russia: ['europe', 'asia'],
+  asia: ['russia', 'oceania'],
+  oceania: ['asia', 'south-america'],
+};
+
 export const ACTIONS: Readonly<Record<string, ActionDefinition>> = {
   'buy-media': {
     id: 'buy-media',
@@ -55,7 +66,7 @@ export const ACTIONS: Readonly<Record<string, ActionDefinition>> = {
     effects: { force: 42 },
     exposure: 12,
     minimum: { force: 50 },
-    requires: 'weaponry-I',
+    requires: 'weaponry-1',
   },
   'fund-abundance': {
     id: 'fund-abundance',
@@ -73,6 +84,6 @@ export const ACTIONS: Readonly<Record<string, ActionDefinition>> = {
     cost: 13,
     effects: { enlighten: 25 },
     exposure: -6,
-    requires: 'psychology-II',
+    requires: 'psychology-2',
   },
 } as const;

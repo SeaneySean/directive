@@ -11,6 +11,8 @@ import {
   createCampaign,
   endTurn as endCampaignTurn,
 } from '../src/game/strategy/campaign.ts';
+import { pendingEvent, resolveEvent } from '../src/game/strategy/events.ts';
+import { RESEARCH, chooseResearch, isResearchAvailable } from '../src/game/strategy/research.ts';
 import type { CampaignState } from '../src/game/strategy/types.ts';
 
 const pct = (count: number, total: number) => `${((100 * count) / total).toFixed(1)}%`;
@@ -36,6 +38,29 @@ function assignRandomActions(state: CampaignState, policySeed: number): { state:
   return { state: next, seed };
 }
 
+function chooseRandomResearch(state: CampaignState, policySeed: number): { state: CampaignState; seed: number } {
+  if (state.activeResearch) return { state, seed: policySeed };
+  const choices = Object.keys(RESEARCH).filter((nodeId) => isResearchAvailable(state, nodeId));
+  if (!choices.length) return { state, seed: policySeed };
+  const pick = randomIndex(policySeed, choices.length);
+  return { state: chooseResearch(state, choices[pick.index]!), seed: pick.seed };
+}
+
+function resolvePendingEvents(state: CampaignState, policySeed: number): { state: CampaignState; seed: number } {
+  let next = state;
+  let seed = policySeed;
+  while (pendingEvent(next)) {
+    const event = pendingEvent(next)!;
+    const legal = event.choices
+      .map((choice, index) => ({ choice, index }))
+      .filter(({ choice }) => !choice.available || choice.available(next));
+    const pick = randomIndex(seed, legal.length);
+    seed = pick.seed;
+    next = resolveEvent(next, legal[pick.index]!.index);
+  }
+  return { state: next, seed };
+}
+
 function runCampaigns(games: number): void {
   let won = 0;
   let lost = 0;
@@ -46,9 +71,14 @@ function runCampaigns(games: number): void {
     let state = createCampaign(seed);
     let policySeed = seed ^ 0x5f3759df;
     while (state.outcome === 'playing' && state.turn <= 40) {
-      const assigned = assignRandomActions(state, policySeed);
-      state = endCampaignTurn(assigned.state);
-      policySeed = assigned.seed;
+      const events = resolvePendingEvents(state, policySeed);
+      const research = chooseRandomResearch(events.state, events.seed);
+      const assigned = assignRandomActions(research.state, research.seed);
+      const resolved = resolvePendingEvents(assigned.state, assigned.seed);
+      const next = endCampaignTurn(resolved.state);
+      if (next === resolved.state) throw new Error(`campaign ${seed} stalled on turn ${state.turn}`);
+      state = next;
+      policySeed = resolved.seed;
     }
     if (state.outcome === 'won') won++;
     else if (state.outcome === 'lost') lost++;
