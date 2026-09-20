@@ -49,7 +49,7 @@ const MAP_BOXES: readonly MapBox[] = [
   { id: 'africa', x: 450, y: 300, width: 150, height: 175 },
   { id: 'russia', x: 630, y: 105, width: 230, height: 110 },
   { id: 'asia', x: 790, y: 235, width: 180, height: 140 },
-  { id: 'oceania', x: 800, y: 455, width: 165, height: 105 },
+  { id: 'oceania', x: 800, y: 430, width: 165, height: 105 },
 ] as const;
 
 const PATH_COLOUR: Record<InfluencePath, number> = {
