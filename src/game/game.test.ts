@@ -201,7 +201,7 @@ describe('mission scenarios', () => {
   test('Area 51 and Atlantis use the fixed squad and enemy statistics', () => {
     expect(AREA51_HANGAR.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
     expect(ATLANTIS_RUINS.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
-    expect(AREA51_HANGAR.units.filter((unit) => unit.team === 'alien')).toHaveLength(3);
+    expect(AREA51_HANGAR.units.filter((unit) => unit.team === 'alien')).toHaveLength(4);
     expect(ATLANTIS_RUINS.units.filter((unit) => unit.team === 'alien')).toHaveLength(4);
     expect([...AREA51_HANGAR.units, ...ATLANTIS_RUINS.units]
       .filter((unit) => unit.team === 'squad')
