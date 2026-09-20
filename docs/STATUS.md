@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 20 Sep 2026, 18:05. Deadline: 30 Sep 2026.
+Last updated: 20 Sep 2026, 19:10. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -9,8 +9,8 @@ Last updated: 20 Sep 2026, 18:05. Deadline: 30 Sep 2026.
 | 0–5 | Scaffold, tactical prototype, world layer, isometric render, research + events, missions + endings | merged on master |
 | 6a | Balance against a human + explanation layer (title screen with your splash, How To Play, first-turn guide, hover text, event context, mission briefing and debrief, battle hints, save/load) | merged on master |
 | 6a+ | Mission maps redrawn by hand after "still unplayable": open floors, scattered cover, three-hit guards | on master, needs your playtest |
-| 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, portraits, event art) | built on branch `slice/6b-art`; Athena sent it back for five layout fixes (event text under the picture, battle panel overlap, Russia card hidden, title cropped); Orpheus fixing now. Screens so far: `docs/screens/6b/` |
-| 6c | Mobile sizing, Loom, Skool post | last |
+| 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, your sprites, portraits, event art) | merged on master |
+| 6c | Polish (two small nits), balance from your playtests, mobile sizing, Loom, Skool post | next |
 
 ## What I need from Sean
 

@@ -157,5 +157,5 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | # | Slice | Owner | Status |
 |---|---|---|---|
 | 6a | Balance against a human + explanation layer (title, help, hints, briefings, hover text, save/load) | worker → critic | merged 20 Sep; human difficulty gate still pending Sean's playtest |
-| 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | next |
-| 6c | Mobile sizing, Loom, Skool post | conductor | last |
+| 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | merged 20 Sep |
+| 6c | Polish (briefing text scrim, portrait HP digits, balance from playtests), mobile sizing, Loom, Skool post | conductor | next |
