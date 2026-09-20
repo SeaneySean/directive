@@ -60,18 +60,20 @@ const MISSION_SQUAD: Unit[] = [
 
 export const AREA51_HANGAR: Scenario = {
   name: 'Area 51 Hangar',
+  // Open hangar floor. Crate clusters give cover to stand beside; the objective
+  // sits under the craft at the far end, flanked by crates, four moves away.
   rows: [
     '################',
     '#..............#',
-    '#..cc...c..cc..#',
+    '#..cc......cc..#',
+    '#......c.......#',
+    '#....c....c....#',
     '#..............#',
-    '#...c..cc...c..#',
+    '#..cc......cc..#',
+    '#.......c......#',
+    '#..cc......cc..#',
     '#..............#',
-    '#..cc...c..cc..#',
-    '#.ccccccccccccc#',
-    '#...c..cc...c..#',
-    '#..............#',
-    '#ccccccccccccc.#',
+    '#.....c..c.....#',
     '#..............#',
     '#.c..c..c..c...#',
     '#..............#',
@@ -80,28 +82,29 @@ export const AREA51_HANGAR: Scenario = {
   ],
   units: [
     ...MISSION_SQUAD,
-    alien('g1', 'Guard', 3, 8, GUARD_RIFLE, 20),
-    alien('g2', 'Guard', 5, 8, GUARD_RIFLE, 20),
-    alien('g3', 'Guard', 12, 8, GUARD_RIFLE, 20),
+    alien('g1', 'Guard', 4, 3, GUARD_RIFLE, 12),
+    alien('g2', 'Guard', 11, 3, GUARD_RIFLE, 12),
+    alien('g3', 'Guard', 8, 6, GUARD_RIFLE, 12),
   ],
-  objective: { tile: { x: 8, y: 4 }, holdRounds: 2 },
+  objective: { tile: { x: 8, y: 3 }, holdRounds: 2 },
 };
 
 export const ATLANTIS_RUINS: Scenario = {
   name: 'Atlantis Ruins',
+  // Broken colonnade. Pillars scattered for cover; the formula altar at the far end.
   rows: [
     '################',
     '#..............#',
-    '#.c...c.c.c....#',
+    '#.c...c..c...c.#',
     '#..............#',
-    '#....c..c..c...#',
+    '#....c....c....#',
     '#..............#',
-    '#.c...c.c......#',
-    '#.ccccccccccccc#',
-    '#....c..c......#',
-    '#.........c....#',
-    '#ccccccccccccc.#',
-    '#......c.......#',
+    '#.c..........c.#',
+    '#......c.c.....#',
+    '#..c........c..#',
+    '#..............#',
+    '#.....c..c.....#',
+    '#..............#',
     '#.c..c..c..c...#',
     '#..............#',
     '#..............#',
@@ -109,12 +112,12 @@ export const ATLANTIS_RUINS: Scenario = {
   ],
   units: [
     ...MISSION_SQUAD,
-    alien('u1', 'Guardian Alpha', 3, 8, GUARDIAN_WEAPON, 22),
-    alien('u2', 'Guardian Beta', 7, 8, GUARDIAN_WEAPON, 22),
-    alien('u3', 'Guardian Gamma', 11, 8, GUARDIAN_WEAPON, 22),
-    alien('u4', 'Guardian Delta', 10, 5, GUARDIAN_WEAPON, 22),
+    alien('u1', 'Guardian Alpha', 3, 3, GUARDIAN_WEAPON, 14),
+    alien('u2', 'Guardian Beta', 12, 3, GUARDIAN_WEAPON, 14),
+    alien('u3', 'Guardian Gamma', 6, 6, GUARDIAN_WEAPON, 14),
+    alien('u4', 'Guardian Delta', 10, 6, GUARDIAN_WEAPON, 14),
   ],
-  objective: { tile: { x: 8, y: 4 }, holdRounds: 2 },
+  objective: { tile: { x: 8, y: 3 }, holdRounds: 2 },
 };
 
 export const SCENARIOS: Scenario[] = [FARMSTEAD, AREA51_HANGAR, ATLANTIS_RUINS];
