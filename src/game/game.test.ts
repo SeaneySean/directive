@@ -4,7 +4,7 @@ import { hasLineOfSight, inCover, line } from './los.ts';
 import { distance, isWalkable, parseMap, tileAt } from './map.ts';
 import { pathTo, reachable } from './pathfinding.ts';
 import { nextRandom, rollPercent } from './rng.ts';
-import { FARMSTEAD } from './scenarios.ts';
+import { AREA51_HANGAR, ATLANTIS_RUINS, FARMSTEAD } from './scenarios.ts';
 import { createGame, endTurn, livingUnits, moveUnit, selectUnit, shoot, unitById } from './state.ts';
 import { decide, runTeamTurn } from './ai.ts';
 import type { Scenario, Unit } from './types.ts';
@@ -146,6 +146,16 @@ describe('state', () => {
     expect(result!.state.outcome).toBe('won');
     expect(livingUnits(result!.state, 'alien').length).toBe(0);
   });
+  test('killing every enemy still wins an objective mission', () => {
+    const objective = { ...small, objective: { tile: { x: 1, y: 4 }, holdRounds: 2 } };
+    let result = shoot(createGame(objective, 1), 's', 'a');
+    for (let seed = 2; !result?.killed && seed < 50; seed++) {
+      result = shoot(createGame(objective, seed), 's', 'a');
+    }
+    expect(result?.killed).toBe(true);
+    expect(result?.state.outcome).toBe('won');
+    expect(result?.state.objectiveHoldRounds).toBe(0);
+  });
   test('end turn swaps team, refills AP and counts rounds', () => {
     let state = createGame(small);
     state = moveUnit(state, 's', { x: 2, y: 1 });
@@ -156,6 +166,43 @@ describe('state', () => {
     expect(state.turn).toBe('squad');
     expect(state.round).toBe(2);
     expect(unitById(state, 's').ap).toBe(2);
+  });
+
+  test('wins after holding an objective for consecutive player turns', () => {
+    const objective: Scenario = {
+      ...small,
+      objective: { tile: { x: 1, y: 1 }, holdRounds: 2 },
+    };
+    let state = createGame(objective);
+    state = endTurn(state);
+    expect(state.outcome).toBe('playing');
+    expect(state.objectiveHoldRounds).toBe(1);
+    state = endTurn(state);
+    state = endTurn(state);
+    expect(state.outcome).toBe('won');
+    expect(state.objectiveHoldRounds).toBe(2);
+  });
+
+  test('moving off the objective loses accumulated hold progress', () => {
+    const objective: Scenario = {
+      ...small,
+      objective: { tile: { x: 1, y: 1 }, holdRounds: 2 },
+    };
+    let state = endTurn(createGame(objective));
+    state = endTurn(state);
+    state = moveUnit(state, 's', { x: 2, y: 1 });
+    state = endTurn(state);
+    expect(state.outcome).toBe('playing');
+    expect(state.objectiveHoldRounds).toBe(0);
+  });
+});
+
+describe('mission scenarios', () => {
+  test('Area 51 and Atlantis define distinct two-round objective maps', () => {
+    expect(AREA51_HANGAR.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
+    expect(ATLANTIS_RUINS.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
+    expect(AREA51_HANGAR.units.some((unit) => unit.team === 'alien' && unit.weapon.name === 'Rifle')).toBe(true);
+    expect(ATLANTIS_RUINS.units.some((unit) => unit.team === 'alien' && unit.name.includes('Guardian'))).toBe(true);
   });
 });
 

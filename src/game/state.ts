@@ -16,6 +16,10 @@ export function createGame(scenario: Scenario, seed = 1): GameState {
     seed,
     log: [{ round: 1, text: `Mission: ${scenario.name}` }],
     outcome: 'playing',
+    objective: scenario.objective
+      ? { tile: { ...scenario.objective.tile }, holdRounds: scenario.objective.holdRounds }
+      : undefined,
+    objectiveHoldRounds: 0,
   };
 }
 
@@ -111,6 +115,14 @@ export function checkOutcome(state: GameState): GameState {
 /** Hand the turn to the other team and refill their AP. */
 export function endTurn(state: GameState): GameState {
   if (state.outcome !== 'playing') return state;
+  if (state.turn === 'squad' && state.objective) {
+    const holding = livingUnits(state, 'squad').some((unit) => same(unit.pos, state.objective!.tile));
+    const objectiveHoldRounds = holding ? state.objectiveHoldRounds + 1 : 0;
+    if (objectiveHoldRounds >= state.objective.holdRounds) {
+      return log({ ...state, objectiveHoldRounds, outcome: 'won' }, 'Objective secured.');
+    }
+    state = { ...state, objectiveHoldRounds };
+  }
   const nextTeam: Team = state.turn === 'squad' ? 'alien' : 'squad';
   const round = nextTeam === 'squad' ? state.round + 1 : state.round;
   const units = state.units.map((u) => (u.team === nextTeam && u.alive ? { ...u, ap: u.maxAp } : u));

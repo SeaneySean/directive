@@ -57,10 +57,18 @@ export interface GameState {
   seed: number;
   log: LogEntry[];
   outcome: Outcome;
+  objective?: ScenarioObjective;
+  objectiveHoldRounds: number;
+}
+
+export interface ScenarioObjective {
+  tile: Vec;
+  holdRounds: number;
 }
 
 export interface Scenario {
   name: string;
   rows: string[];
   units: Unit[];
+  objective?: ScenarioObjective;
 }

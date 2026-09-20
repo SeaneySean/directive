@@ -66,6 +66,7 @@ export function createCampaign(seed: number): CampaignState {
     flags: [],
     firedEvents: [],
     unlockedMissions: [],
+    missions: {},
     bonusAgents: 0,
     outcome: 'playing',
     endingId: null,

@@ -58,6 +58,14 @@ export const RESEARCH: Readonly<Record<string, ResearchNode>> = {
   },
 } as const;
 
+export function completedResearchGrants(state: CampaignState): string[] {
+  return state.completedResearch.flatMap((nodeId) => RESEARCH[nodeId]?.grants ?? []);
+}
+
+export function hasResearchGrant(state: CampaignState, grant: string): boolean {
+  return completedResearchGrants(state).includes(grant);
+}
+
 function hasRequirement(state: CampaignState, requirement: string): boolean {
   return state.completedResearch.includes(requirement) || state.items.includes(requirement);
 }

@@ -12,8 +12,10 @@ import {
 } from '../game/strategy/campaign.ts';
 import { ACTIONS } from '../game/strategy/data.ts';
 import { pendingEvent, resolveEvent } from '../game/strategy/events.ts';
+import { MISSIONS, availableMissions, startMission } from '../game/strategy/missions.ts';
 import { RESEARCH, chooseResearch, isResearchAvailable } from '../game/strategy/research.ts';
 import type { CampaignState, InfluencePath, RegionState } from '../game/strategy/types.ts';
+import { CAMPAIGN_REGISTRY_KEY } from './EndingScene.ts';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -68,7 +70,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.state = createCampaign(Date.now() | 0);
+    this.state = (this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState | undefined)
+      ?? createCampaign(Date.now() | 0);
+    this.registry.set(CAMPAIGN_REGISTRY_KEY, this.state);
     this.cameras.main.setBackgroundColor(COLOURS.background);
     this.redraw();
   }
@@ -93,6 +97,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private redraw(): void {
+    this.registry.set(CAMPAIGN_REGISTRY_KEY, this.state);
+    if (this.state.outcome !== 'playing') {
+      this.scene.start('ending');
+      return;
+    }
     for (const object of this.objects) object.destroy();
     this.objects = [];
 
@@ -109,12 +118,9 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.drawPanel(graphics);
-    if (this.state.outcome === 'playing') {
-      this.drawResearchPanel();
-      if (pendingEvent(this.state)) this.drawEventModal();
-    } else {
-      this.drawEnding(graphics);
-    }
+    this.drawMissionsPanel();
+    this.drawResearchPanel();
+    if (pendingEvent(this.state)) this.drawEventModal();
   }
 
   private drawRegion(graphics: Phaser.GameObjects.Graphics, box: MapBox, region: RegionState): void {
@@ -186,6 +192,50 @@ export class WorldScene extends Phaser.Scene {
         this.redraw();
       });
     }
+  }
+
+  private drawMissionsPanel(): void {
+    const x = 610;
+    this.track(this.add.rectangle(785, 55, 350, 82, COLOURS.panel, 0.97))
+      .setStrokeStyle(1, COLOURS.outline);
+    this.text(x + 8, 20, 'MISSIONS', 12, '#d4af37');
+    const available = new Set(availableMissions(this.state).map((mission) => mission.id));
+    const listed = MISSIONS.filter((mission) =>
+      available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
+    );
+    if (!listed.length) {
+      this.text(x + 8, 46, 'NO MISSIONS AVAILABLE', 11, '#596575');
+      return;
+    }
+    listed.forEach((mission, index) => {
+      const y = 43 + index * 27;
+      const complete = this.state.missions[mission.id]?.status === 'completed';
+      this.text(
+        x + 8,
+        y,
+        `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
+        10,
+        complete ? '#75d69c' : '#e9eef5',
+      );
+      if (!complete) {
+        const launch = this.track(this.add.text(x + 272, y - 5, ' LAUNCH ', {
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          color: '#0d1117',
+          backgroundColor: '#d4af37',
+          padding: { x: 4, y: 4 },
+        }));
+        if (!pendingEvent(this.state)) {
+          launch.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+            const next = startMission(this.state, mission.id);
+            if (next === this.state) return;
+            this.state = next;
+            this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
+            this.scene.start('battle', { missionId: mission.id });
+          });
+        }
+      }
+    });
   }
 
   private drawActionPicker(region: RegionState): void {
@@ -303,21 +353,6 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private drawEnding(graphics: Phaser.GameObjects.Graphics): void {
-    graphics.fillStyle(0x05070a, 0.94).fillRect(0, 0, WIDTH, HEIGHT);
-    const won = this.state.outcome === 'won';
-    this.text(0, 250, won ? 'THE WORLD IS YOURS' : 'THE CONSPIRACY IS EXPOSED', 38, won ? '#d4af37' : '#d15b64')
-      .setOrigin(0.5)
-      .setX(WIDTH / 2);
-    const newGame = this.track(this.add.text(WIDTH / 2, 360, ' NEW GAME ', {
-      fontFamily: 'monospace',
-      fontSize: '20px',
-      color: '#0d1117',
-      backgroundColor: '#d4af37',
-      padding: { x: 14, y: 9 },
-    }).setOrigin(0.5));
-    newGame.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.restart());
-  }
 }
 
 const endTurnCampaign = endTurn;

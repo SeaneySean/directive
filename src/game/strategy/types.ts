@@ -3,6 +3,12 @@ export const PATHS = ['subvert', 'force', 'enlighten'] as const;
 export type InfluencePath = (typeof PATHS)[number];
 export type CampaignOutcome = 'playing' | 'won' | 'lost';
 export type EndingId = 'exposed' | 'machine-ascends' | 'quiet-throne' | 'pax-illuminata' | 'long-dawn';
+export type MissionStatus = 'in-progress' | 'completed' | 'failed';
+
+export interface MissionProgress {
+  status: MissionStatus;
+  retryTurn?: number;
+}
 
 export interface InfluenceMeters {
   subvert: number;
@@ -49,6 +55,7 @@ export interface CampaignState {
   flags: string[];
   firedEvents: string[];
   unlockedMissions: string[];
+  missions: Record<string, MissionProgress>;
   bonusAgents: number;
   outcome: CampaignOutcome;
   endingId: EndingId | null;

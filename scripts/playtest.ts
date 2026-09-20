@@ -12,10 +12,12 @@ import {
   endTurn as endCampaignTurn,
 } from '../src/game/strategy/campaign.ts';
 import { pendingEvent, resolveEvent } from '../src/game/strategy/events.ts';
+import { availableMissions, completeMission, startMission } from '../src/game/strategy/missions.ts';
 import { RESEARCH, chooseResearch, isResearchAvailable } from '../src/game/strategy/research.ts';
 import type { CampaignState } from '../src/game/strategy/types.ts';
 
 const pct = (count: number, total: number) => `${((100 * count) / total).toFixed(1)}%`;
+const MAX_CAMPAIGN_TURNS = 40;
 
 function randomIndex(seed: number, length: number): { index: number; seed: number } {
   const random = nextRandom(seed);
@@ -61,6 +63,14 @@ function resolvePendingEvents(state: CampaignState, policySeed: number): { state
   return { state: next, seed };
 }
 
+function completeAvailableMissions(state: CampaignState): CampaignState {
+  let next = state;
+  for (const mission of availableMissions(next)) {
+    next = completeMission(startMission(next, mission.id), mission.id, 'won');
+  }
+  return next;
+}
+
 function runCampaigns(games: number): void {
   let won = 0;
   let lost = 0;
@@ -70,9 +80,10 @@ function runCampaigns(games: number): void {
   for (let seed = 1; seed <= games; seed++) {
     let state = createCampaign(seed);
     let policySeed = seed ^ 0x5f3759df;
-    while (state.outcome === 'playing' && state.turn <= 40) {
+    while (state.outcome === 'playing' && state.turn <= MAX_CAMPAIGN_TURNS) {
       const events = resolvePendingEvents(state, policySeed);
-      const research = chooseRandomResearch(events.state, events.seed);
+      const missions = completeAvailableMissions(events.state);
+      const research = chooseRandomResearch(missions, events.seed);
       const assigned = assignRandomActions(research.state, research.seed);
       const resolved = resolvePendingEvents(assigned.state, assigned.seed);
       const next = endCampaignTurn(resolved.state);
@@ -83,10 +94,10 @@ function runCampaigns(games: number): void {
     if (state.outcome === 'won') won++;
     else if (state.outcome === 'lost') lost++;
     else stalled++;
-    turns += Math.min(40, state.turn - 1);
+    turns += Math.min(MAX_CAMPAIGN_TURNS, state.turn - 1);
   }
 
-  console.log(`campaigns: ${games}  max turns: 40`);
+  console.log(`campaigns: ${games}  max turns: ${MAX_CAMPAIGN_TURNS}`);
   console.log(`won: ${won} (${pct(won, games)})  lost: ${lost} (${pct(lost, games)})  stalled: ${stalled} (${pct(stalled, games)})  mean turns: ${(turns / games).toFixed(1)}`);
 }
 

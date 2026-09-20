@@ -16,9 +16,13 @@ import {
   unitAt,
   type GameState,
   type Reach,
+  type Scenario,
   type Unit,
   type Vec,
 } from '../game/index.ts';
+import { completeMission, missionScenario, type MissionId } from '../game/strategy/missions.ts';
+import type { CampaignState } from '../game/strategy/types.ts';
+import { CAMPAIGN_REGISTRY_KEY } from './EndingScene.ts';
 import { gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
 
 export { TILE_H, TILE_W } from './iso.ts';
@@ -42,6 +46,8 @@ const COLORS = {
 /** Isometric tactical renderer. All rules remain in src/game. */
 export class BattleScene extends Phaser.Scene {
   private state!: GameState;
+  private scenario: Scenario = FARMSTEAD;
+  private missionId: MissionId | null = null;
   private boardObjects: Phaser.GameObjects.GameObject[] = [];
   private panel!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
@@ -50,9 +56,15 @@ export class BattleScene extends Phaser.Scene {
   private banner!: Phaser.GameObjects.Text;
   private reach: Reach | null = null;
   private busy = false;
+  private returning = false;
 
   constructor() {
     super('battle');
+  }
+
+  init(data: { missionId?: MissionId }): void {
+    this.missionId = data.missionId ?? null;
+    this.returning = false;
   }
 
   preload(): void {
@@ -62,7 +74,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.state = createGame(FARMSTEAD, Date.now() % 100000);
+    if (this.missionId) {
+      const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
+      this.scenario = missionScenario(campaign, this.missionId);
+    } else {
+      this.scenario = FARMSTEAD;
+    }
+    this.state = createGame(this.scenario, Date.now() % 100000);
 
     this.add.rectangle(PANEL_X, 0, PANEL_W, 720, 0x090d13, 0.96).setOrigin(0).setDepth(9000);
     this.add.rectangle(PANEL_X, 0, 2, 720, 0xf0c14b, 0.55).setOrigin(0).setDepth(9001);
@@ -117,7 +135,7 @@ export class BattleScene extends Phaser.Scene {
       this.cycleSelection();
     });
     this.input.keyboard?.on('keydown-R', () => {
-      if (this.state.outcome !== 'playing') this.scene.restart();
+      if (!this.missionId && this.state.outcome !== 'playing') this.scene.restart();
     });
 
     this.autoSelect();
@@ -145,6 +163,18 @@ export class BattleScene extends Phaser.Scene {
     const sel = selectedUnit(next);
     this.reach = sel && canAct(next, sel) ? reachable(next.grid, next.units, sel.pos, sel.move) : null;
     this.redraw();
+    if (next.outcome !== 'playing') this.finishMission(next.outcome);
+  }
+
+  private finishMission(result: 'won' | 'lost'): void {
+    if (!this.missionId || this.returning) return;
+    this.returning = true;
+    const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
+    this.registry.set(
+      CAMPAIGN_REGISTRY_KEY,
+      completeMission(campaign, this.missionId, result),
+    );
+    this.time.delayedCall(900, () => this.scene.start('world'));
   }
 
   private autoSelect(): void {
@@ -271,6 +301,17 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    if (this.state.objective) {
+      const centre = gridToScreen(this.state.objective.tile, BOARD_ORIGIN);
+      const objective = this.track(this.add.graphics());
+      objective.fillStyle(0xd4af37, 0.75).fillPoints([
+        new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2 + 3),
+        new Phaser.Geom.Point(centre.x + TILE_W / 2 - 5, centre.y),
+        new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2 - 3),
+        new Phaser.Geom.Point(centre.x - TILE_W / 2 + 5, centre.y),
+      ], true).setDepth(1);
+    }
+
     if (this.reach) {
       const highlight = this.track(this.add.graphics());
       highlight.fillStyle(COLORS.reach, 0.52).setDepth(1);
@@ -347,7 +388,10 @@ export class BattleScene extends Phaser.Scene {
   private drawPanel(): void {
     const state = this.state;
     const sel = selectedUnit(state);
-    const lines = [`ILLUMINATUS  //  ${FARMSTEAD.name.toUpperCase()}`, `Round ${state.round}   ${state.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
+    const lines = [`ILLUMINATUS  //  ${this.scenario.name.toUpperCase()}`, `Round ${state.round}   ${state.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
+    if (state.objective) {
+      lines.push(`Objective hold: ${state.objectiveHoldRounds}/${state.objective.holdRounds}`, '');
+    }
     if (sel) {
       lines.push(
         `> ${sel.name}`,
@@ -366,7 +410,8 @@ export class BattleScene extends Phaser.Scene {
     this.logText.setText(state.log.slice(-9).map((entry) => entry.text));
 
     if (state.outcome !== 'playing') {
-      this.banner.setText(state.outcome === 'won' ? 'AREA SECURED\n\nR to restart' : 'SQUAD LOST\n\nR to restart').setVisible(true);
+      const suffix = this.missionId ? '\n\nRETURNING TO WORLD' : '\n\nR to restart';
+      this.banner.setText(`${state.outcome === 'won' ? 'AREA SECURED' : 'SQUAD LOST'}${suffix}`).setVisible(true);
       this.endTurnBtn.setVisible(false);
     } else {
       this.banner.setVisible(false);
