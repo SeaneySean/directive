@@ -265,7 +265,7 @@ export class WorldScene extends Phaser.Scene {
       const y = 62 + index * 24;
       const complete = this.state.missions[mission.id]?.status === 'completed';
       this.track(this.add.text(x + 8, y, `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
-        textStyle(10, complete ? HEX.complete : HEX.text))).setDepth(21);
+        textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(21);
       if (!complete) {
         const launch = this.track(goldButton(this, x + 272, y - 5, 'LAUNCH', () => {
           this.drawMissionBriefing(
@@ -273,7 +273,7 @@ export class WorldScene extends Phaser.Scene {
             mission.name,
             mission.scenario.units.filter((unit) => unit.team === 'alien').length,
           );
-        }, { size: 10, padding: { x: 5, y: 4 } }));
+        }, { size: 11, padding: { x: 5, y: 4 } }));
         launch.setDepth(21);
         if (pendingEvent(this.state)) {
           launch.disableInteractive();
@@ -398,7 +398,7 @@ export class WorldScene extends Phaser.Scene {
         card.setStrokeStyle(active ? 2 : 1, active ? COL.crtGreen : COL.crtDim, 0.95).setDepth(31);
 
         const colour = complete ? HEX.complete : active ? HEX.crt : available ? HEX.crt : HEX.crtDim;
-        const label = this.track(this.add.text(x + 8, cardY, `${node.name.toUpperCase()}\n${status}`, textStyle(10, colour))).setDepth(32);
+        const label = this.track(this.add.text(x + 8, cardY, `${node.name.toUpperCase()}\n${status}`, textStyle(11, colour))).setDepth(32);
         void label;
         card.setInteractive({ useHandCursor: available });
         this.attachHover(card, `${node.name}: ${RESEARCH_TEXT[node.id] ?? ''}`);

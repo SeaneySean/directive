@@ -564,7 +564,7 @@ export class BattleScene extends Phaser.Scene {
       // AP bar
       const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 160, 6, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
       const ap = this.add.rectangle(PANEL_X + 56, y + 48, (160 * unit.ap) / unit.maxAp, 6, COL.goldBright, 1).setOrigin(0, 0.5).setDepth(9012);
-      const apLabel = this.add.text(PANEL_X + 222, y + 48, `${unit.ap} AP`, textStyle(10, HEX.goldPale)).setOrigin(1, 0.5).setDepth(9012);
+      const apLabel = this.add.text(PANEL_X + 222, y + 48, `${unit.ap} AP`, textStyle(11, HEX.goldPale)).setOrigin(1, 0.5).setDepth(9012);
       cards.push(apBg, ap, apLabel);
     });
     this.boardObjects.push(...cards);
