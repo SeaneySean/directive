@@ -1,24 +1,23 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 20 Sep 2026, evening. Deadline: 30 Sep 2026.
+Last updated: 20 Sep 2026, 16:40. Deadline: 30 Sep 2026.
 
 ## Where things are
 
 | Slice | What | State |
 |---|---|---|
 | 0–5 | Scaffold, tactical prototype, world layer, isometric render, research + events, missions + endings | merged on master |
-| 6a | Balance against a human + explanation layer (title screen with your splash, How To Play, first-turn guide, hover text, event context, mission briefing and debrief, battle hints, save/load) | built and verified on branch `slice/6a-balance-explain`, waiting for a merge decision |
-| 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, portraits, event art) | brief written, starts after 6a merges and your images are in |
+| 6a | Balance against a human + explanation layer (title screen with your splash, How To Play, first-turn guide, hover text, event context, mission briefing and debrief, battle hints, save/load) | merged on master |
+| 6a+ | Mission maps redrawn by hand after "still unplayable": open floors, scattered cover, three-hit guards | on master, needs your playtest |
+| 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, portraits, event art) | Orpheus building it now on DeepSeek; all 17 of your images are in and compressed |
 | 6c | Mobile sizing, Loom, Skool post | last |
 
 ## What I need from Sean
 
-1. **Images** into `/home/sean/games/directive/public/assets/art/` with the exact names in
-   `docs/ART-PROMPTS.md` (portraits into `art/portraits/`). Missing ones fall back to placeholders.
-2. **Playtest the hangar** on the 6a branch and say whether it now feels fair:
-   `cd ~/games/directive && git checkout slice/6a-balance-explain && bun run dev`
-3. **Say "merge 6a"** (or wait for Athena once your ChatGPT cap resets) so 6b can start.
-4. Still outstanding from earlier: `gh auth refresh -h github.com -s workflow` so the Pages
+1. **Playtest the hangar on master** (the redrawn map) and say whether it is fair now:
+   `cd ~/games/directive && git checkout master && git pull && bun run dev`
+   Reach the gold tile under the craft and hold it two turns, or kill the three guards.
+2. Still outstanding from earlier: `gh auth refresh -h github.com -s workflow` so the Pages
    deploy can go live; the judges need a link.
 
 ## Things worth knowing
