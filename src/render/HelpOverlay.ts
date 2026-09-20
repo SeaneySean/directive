@@ -9,10 +9,10 @@ const HEIGHT = 720;
 export function showHelpOverlay(scene: Phaser.Scene): Phaser.GameObjects.Container {
   let page = 0;
   const container = scene.add.container(0, 0).setDepth(20_000);
-  const backdrop = scene.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x020305, 0.9)
+  const backdrop = scene.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.overlay, 0.9)
     .setInteractive();
   const panel = scene.add.rectangle(WIDTH / 2, HEIGHT / 2, 720, 400, COL.crtBg, 1)
-    .setStrokeStyle(2, 0x1d7a3d);
+    .setStrokeStyle(2, COL.crtDim);
   const heading = scene.add.text(360, 210, '', displayStyle(26, HEX.crt));
   const body = scene.add.text(360, 268, '', textStyle(18, HEX.crt, {
     lineSpacing: 10, wordWrap: { width: 620 },
@@ -53,10 +53,10 @@ function crtButton(scene: Phaser.Scene, x: number, y: number, label: string, onC
       fontFamily: '"IBM Plex Mono", monospace',
       fontSize: '16px',
       color: HEX.crt,
-      backgroundColor: '#02120a',
+      backgroundColor: HEX.crtPanel,
       padding: { x: 8, y: 6 },
     })
-    .setStroke('#39ff77', 1)
+    .setStroke(HEX.crt, 1)
     .setInteractive({ useHandCursor: true });
   button.on('pointerdown', onClick);
   return button;

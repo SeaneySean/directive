@@ -41,8 +41,8 @@ const PATH_COLOUR: Record<InfluencePath, number> = {
 
 const PATH_HEX: Record<InfluencePath, string> = {
   subvert: HEX.gold,
-  force: '#e08a8a',
-  enlighten: '#7fe0e6',
+  force: HEX.forceText,
+  enlighten: HEX.enlightenText,
 };
 
 function dominantPath(region: RegionState): InfluencePath {
@@ -116,7 +116,7 @@ export class WorldScene extends Phaser.Scene {
       this.drawRegion(region);
     }
     this.hoverText = this.track(this.add.text(0, 0, '', textStyle(13, HEX.white, {
-      backgroundColor: '#05070aee',
+      backgroundColor: HEX.hoverBg,
       padding: { x: 7, y: 5 },
       wordWrap: { width: 360 },
     }))).setDepth(15_000).setVisible(false);
@@ -139,7 +139,7 @@ export class WorldScene extends Phaser.Scene {
       fill.strokePoints(points.map((point) => new Phaser.Geom.Point(point.x, point.y)), true, true);
     }
 
-    const hit = this.track(this.add.polygon(0, 0, points, 0xffffff, 0.001));
+    const hit = this.track(this.add.polygon(0, 0, points, COL.white, 0.001));
     hit.setDepth(2).setOrigin(0, 0);
     hit.setInteractive({
       hitArea: hit.geom,
@@ -198,7 +198,7 @@ export class WorldScene extends Phaser.Scene {
       `REGIONS   ${heldRegions(this.state).length}/5`,
     ], textStyle(14, HEX.text))).setDepth(11);
 
-    this.track(this.add.text(PANEL_X + 16, 186, `EXPOSURE ${Math.round(this.state.exposure)}/100`, textStyle(13, '#c98cf2'))).setDepth(11);
+    this.track(this.add.text(PANEL_X + 16, 186, `EXPOSURE ${Math.round(this.state.exposure)}/100`, textStyle(13, HEX.exposureText))).setDepth(11);
     const exposureBar = this.track(this.add.graphics()).setDepth(11);
     exposureBar.fillStyle(COL.empty, 1).fillRect(PANEL_X + 16, 210, 248, 14);
     exposureBar.fillStyle(COL.exposure, 1).fillRect(PANEL_X + 16, 210, (248 * this.state.exposure) / 100, 14);
@@ -238,7 +238,7 @@ export class WorldScene extends Phaser.Scene {
   private drawGuide(): void {
     const copy = guideText(this.state.turn);
     if (!copy || this.dismissedGuideTurns.has(this.state.turn)) return;
-    const strip = this.track(this.add.rectangle(WIDTH / 2, 16, WIDTH, 32, 0x2b2413, 1))
+    const strip = this.track(this.add.rectangle(WIDTH / 2, 16, WIDTH, 32, COL.hintBg, 1))
       .setStrokeStyle(1, COL.subvert).setDepth(2000);
     const label = this.track(this.add.text(26, 6, copy, textStyle(14, HEX.held))).setDepth(2001);
     const close = this.track(goldButton(this, 1230, 4, 'X', () => {
@@ -291,7 +291,7 @@ export class WorldScene extends Phaser.Scene {
       objects.push(object);
       return object;
     };
-    add(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x030507, 0.92)).setInteractive();
+    add(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.overlay, 0.92)).setInteractive();
     add(this.add.rectangle(640, 372, 900, 560, COL.panel, 1)).setStrokeStyle(2, COL.gold);
     if (this.textures.exists(`briefing-${missionId}`)) {
       const backdrop = add(this.add.image(640, 290, `briefing-${missionId}`));
@@ -332,7 +332,7 @@ export class WorldScene extends Phaser.Scene {
     if (assigned) {
       this.track(this.add.text(PANEL_X + 16, 302, `ASSIGNED: ${ACTIONS[assigned]!.name}`, textStyle(12, HEX.gold))).setDepth(11);
       const clear = this.track(this.add.text(PANEL_X + 16, 330, ' CLEAR ASSIGNMENT ', textStyle(12, HEX.white, {
-        backgroundColor: '#5b2730',
+        backgroundColor: HEX.dangerBg,
         padding: { x: 5, y: 5 },
       }))).setDepth(11);
       clear.setInteractive({ useHandCursor: true });
@@ -350,7 +350,7 @@ export class WorldScene extends Phaser.Scene {
       const y = 302 + index * 46;
       const available = legal.has(action.id);
       const label = this.track(this.add.text(PANEL_X + 16, y, `${action.name.toUpperCase()}  £${actionCost(this.state, action)}\n${this.effectLabel(action.id)}`, textStyle(11, available ? HEX.text : HEX.faint, {
-        backgroundColor: available ? '#263241' : '#171d25',
+        backgroundColor: available ? HEX.actionAvailable : HEX.actionDisabled,
         padding: { x: 6, y: 5 },
         fixedWidth: 248,
       }))).setDepth(11);
@@ -379,7 +379,7 @@ export class WorldScene extends Phaser.Scene {
   private drawResearchPanel(): void {
     const panelY = 545;
     const panel = this.track(this.add.rectangle(500, panelY + 77, 960, 154, COL.crtBg, 0.98));
-    panel.setStrokeStyle(1, 0x1d7a3d, 0.9).setDepth(30);
+    panel.setStrokeStyle(1, COL.crtDim, 0.9).setDepth(30);
 
     this.track(this.add.text(32, panelY + 8, 'RESEARCH', textStyle(14, HEX.crt, { fontFamily: '"Cinzel", Georgia, serif' }))).setDepth(31);
 
@@ -394,8 +394,8 @@ export class WorldScene extends Phaser.Scene {
         const status = complete ? 'DONE' : active ? `${this.state.researchPoints}/${node.cost}` : available ? `${node.cost} RP` : 'LOCKED';
 
         const cardY = panelY + 49 + index * 34;
-        const card = this.track(this.add.rectangle(x + 109, cardY + 14, 218, 30, active ? 0x06310f : 0x02120a, 1));
-        card.setStrokeStyle(active ? 2 : 1, active ? COL.crtGreen : 0x1d7a3d, 0.95).setDepth(31);
+        const card = this.track(this.add.rectangle(x + 109, cardY + 14, 218, 30, active ? COL.crtActive : COL.crtPanel, 1));
+        card.setStrokeStyle(active ? 2 : 1, active ? COL.crtGreen : COL.crtDim, 0.95).setDepth(31);
 
         const colour = complete ? HEX.complete : active ? HEX.crt : available ? HEX.crt : HEX.crtDim;
         const label = this.track(this.add.text(x + 8, cardY, `${node.name.toUpperCase()}\n${status}`, textStyle(10, colour))).setDepth(32);
@@ -427,7 +427,7 @@ export class WorldScene extends Phaser.Scene {
     const event = pendingEvent(this.state);
     if (!event) return;
     const DEPTH = 10_000;
-    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x05070a, 0.86)).setInteractive().setDepth(DEPTH);
+    this.track(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.bg, 0.86)).setInteractive().setDepth(DEPTH);
     this.track(this.add.rectangle(640, 360, 820, 500, COL.panel, 1)).setStrokeStyle(2, COL.exposure).setDepth(DEPTH + 1);
 
     // Artwork on the left (fallback: gold triangle glyph).
@@ -442,7 +442,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     const textX = 470;
-    this.track(this.add.text(textX, 128, 'EVENT', textStyle(12, '#c98cf2'))).setDepth(DEPTH + 2);
+    this.track(this.add.text(textX, 128, 'EVENT', textStyle(12, HEX.exposureText))).setDepth(DEPTH + 2);
     this.track(this.add.text(textX, 152, event.name.toUpperCase(), displayStyle(24, HEX.white))).setDepth(DEPTH + 2);
     this.track(this.add.text(textX, 196, event.description, textStyle(14, HEX.gold)).setWordWrapWidth(340)).setDepth(DEPTH + 2);
     this.track(this.add.text(textX, 226, EVENT_CONTEXT[event.id] ?? '', textStyle(13, HEX.textDim)).setWordWrapWidth(340)).setDepth(DEPTH + 2);
@@ -450,7 +450,7 @@ export class WorldScene extends Phaser.Scene {
     event.choices.forEach((choice, index) => {
       const available = !choice.available || choice.available(this.state);
       const button = this.track(this.add.text(textX, 300 + index * 58, ` ${(labels[index] ?? choice.label).toUpperCase()} `, textStyle(14, available ? HEX.black : HEX.faint, {
-        backgroundColor: available ? HEX.goldBright : '#202936',
+        backgroundColor: available ? HEX.goldBright : HEX.panelMid,
         padding: { x: 8, y: 8 },
         wordWrap: { width: 330 },
       }))).setDepth(DEPTH + 3);

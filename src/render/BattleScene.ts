@@ -36,7 +36,6 @@ const PANEL_X = 1000;
 const ASSET_PATH = 'assets/';
 
 const DIM_DISTANCE = 8; // terrain dims beyond this Chebyshev distance from every squad unit
-const DIM_TINT = 0x666666; // 40% brightness
 
 interface TileSpec {
   floor: string;
@@ -121,23 +120,23 @@ export class BattleScene extends Phaser.Scene {
     this.state = createGame(this.scenario, Date.now() % 100000);
     this.tiles = this.missionId === 'atlantis' ? ATLANTIS_TILES : HANGAR_TILES;
 
-    this.add.rectangle(PANEL_X, 0, PANEL_W, 720, 0x090d13, 0.96).setOrigin(0).setDepth(9000);
+    this.add.rectangle(PANEL_X, 0, PANEL_W, 720, COL.panelDark, 0.96).setOrigin(0).setDepth(9000);
     this.add.rectangle(PANEL_X, 0, 2, 720, COL.gold, 0.55).setOrigin(0).setDepth(9001);
     this.panel = this.add.text(PANEL_X + 16, 14, '', textStyle(13, HEX.text, { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
     this.endTurnBtn = goldButton(this, PANEL_X + 20, 470, 'END TURN (E)', () => this.onEndTurn());
     this.endTurnBtn.setDepth(9002);
     this.hint = this.add.text(PANEL_X + 16, 514, '', textStyle(11, HEX.held, {
-      backgroundColor: '#2b2413',
+      backgroundColor: HEX.hintBg,
       padding: { x: 6, y: 5 },
       wordWrap: { width: PANEL_W - 44 },
     })).setDepth(9002);
-    this.logText = this.add.text(PANEL_X + 16, 600, '', textStyle(11, '#8f9aa8', { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
+    this.logText = this.add.text(PANEL_X + 16, 600, '', textStyle(11, HEX.logText, { wordWrap: { width: PANEL_W - 32 } })).setDepth(9002);
     this.tooltip = this.add.text(0, 0, '', textStyle(12, HEX.white, {
-      backgroundColor: '#000e',
+      backgroundColor: HEX.blackTranslucent,
       padding: { x: 6, y: 4 },
     })).setDepth(10000).setVisible(false);
     this.banner = this.add
-      .text(BOARD_ORIGIN.x, 326, '', displayStyle(30, HEX.white, { backgroundColor: '#000c', padding: { x: 20, y: 12 } }))
+      .text(BOARD_ORIGIN.x, 326, '', displayStyle(30, HEX.white, { backgroundColor: HEX.blackFade, padding: { x: 20, y: 12 } }))
       .setOrigin(0.5)
       .setDepth(10001)
       .setVisible(false);
@@ -208,7 +207,7 @@ export class BattleScene extends Phaser.Scene {
       `Survivors: ${squad.length - fallen.length} of ${squad.length}`,
     ].filter((line, index) => line !== '' || index === 1);
     this.banner.setVisible(false);
-    this.add.rectangle(BOARD_ORIGIN.x, 360, 620, 330, 0x090d13, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
+    this.add.rectangle(BOARD_ORIGIN.x, 360, 620, 330, COL.panelDark, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
     this.add.text(BOARD_ORIGIN.x, 300, lines, {
       fontFamily: '"IBM Plex Mono", monospace', fontSize: '17px', color: result === 'won' ? HEX.goldPale : HEX.text, align: 'center', lineSpacing: 8,
     }).setOrigin(0.5).setDepth(10011);
@@ -281,7 +280,7 @@ export class BattleScene extends Phaser.Scene {
       const result = shoot(this.state, sel.id, clicked.id);
       if (result) {
         this.setState(result.state);
-        this.flash(clicked.pos, result.hit ? 0xffffff : 0x888888);
+        this.flash(clicked.pos, result.hit ? COL.white : COL.miss);
         this.afterAction();
       }
       return;
@@ -362,8 +361,8 @@ export class BattleScene extends Phaser.Scene {
     // Decorative water outside the playable grid (Atlantis only).
     if (this.tiles.watery) {
       const water = this.track(this.add.graphics());
-      water.fillStyle(0x0a2b33, 1).fillRoundedRect(205, 4, 565, 570, 40).setDepth(-10);
-      water.fillStyle(0x0e3a44, 1).fillRoundedRect(225, 20, 525, 540, 36).setDepth(-10);
+      water.fillStyle(COL.waterDeep, 1).fillRoundedRect(205, 4, 565, 570, 40).setDepth(-10);
+      water.fillStyle(COL.water, 1).fillRoundedRect(225, 20, 525, 540, 36).setDepth(-10);
     }
 
     for (let y = 0; y < grid.height; y++) {
@@ -373,7 +372,7 @@ export class BattleScene extends Phaser.Scene {
         const dimmed = this.isDimmed(point);
         const floor = this.track(this.add.image(centre.x, centre.y, this.textureFor(this.tiles.floor, 'iso-floor')));
         floor.setDisplaySize(TILE_W, TILE_H);
-        floor.setTint(dimmed ? DIM_TINT : (x + y) % 2 ? 0x4d5867 : 0x596473);
+        floor.setTint(dimmed ? COL.dimTint : (x + y) % 2 ? COL.floorAlt : COL.floor);
         floor.setDepth(0);
       }
     }
@@ -423,7 +422,7 @@ export class BattleScene extends Phaser.Scene {
     const originY = isWall ? this.tiles.wallOriginY : this.tiles.coverOriginY;
     const obstacle = this.track(this.add.image(centre.x, centre.y, texture));
     obstacle.setDisplaySize(width, height).setOrigin(0.5, originY).setDepth(tileDepth(point, 8));
-    if (dimmed) obstacle.setTint(DIM_TINT);
+    if (dimmed) obstacle.setTint(COL.dimTint);
   }
 
   private spriteFor(unit: Unit): { key: string; feet: number } {
@@ -445,9 +444,9 @@ export class BattleScene extends Phaser.Scene {
     ring.strokeEllipse(0, 0, TILE_W - 4, TILE_H + 8);
 
     const shape = this.add.graphics();
-    shape.fillStyle(0x000000, 0.45).fillEllipse(0, 5, 26, 10);
+    shape.fillStyle(COL.black, 0.45).fillEllipse(0, 5, 26, 10);
     if (unit.id === this.state.selectedId) {
-      shape.lineStyle(2, 0xffffff, 1).strokePoints([
+      shape.lineStyle(2, COL.white, 1).strokePoints([
         new Phaser.Geom.Point(0, -TILE_H / 2 + 1),
         new Phaser.Geom.Point(TILE_W / 2 - 4, 0),
         new Phaser.Geom.Point(0, TILE_H / 2 - 1),
@@ -469,11 +468,11 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const hpWidth = 28;
-    shape.fillStyle(0x171a20, 1).fillRect(-hpWidth / 2, -48, hpWidth, 4);
-    shape.fillStyle(0x7ee08a, 1).fillRect(-hpWidth / 2, -48, (hpWidth * unit.hp) / unit.maxHp, 4);
+    shape.fillStyle(COL.hpBg, 1).fillRect(-hpWidth / 2, -48, hpWidth, 4);
+    shape.fillStyle(COL.hp, 1).fillRect(-hpWidth / 2, -48, (hpWidth * unit.hp) / unit.maxHp, 4);
     if (unit.team === 'squad') {
       for (let i = 0; i < unit.maxAp; i++) {
-        shape.fillStyle(i < unit.ap ? 0xfff2a8 : 0x555555, 1).fillCircle(-5 + i * 10, -43, 2.5);
+        shape.fillStyle(i < unit.ap ? COL.ap : COL.apEmpty, 1).fillCircle(-5 + i * 10, -43, 2.5);
       }
     }
 
@@ -531,7 +530,7 @@ export class BattleScene extends Phaser.Scene {
     const cards: Phaser.GameObjects.GameObject[] = [];
     squad.forEach((unit, index) => {
       const y = 96 + index * 78;
-      const card = this.add.rectangle(PANEL_X + PANEL_W / 2, y + 34, PANEL_W - 24, 70, 0x0b1018, 0.95);
+      const card = this.add.rectangle(PANEL_X + PANEL_W / 2, y + 34, PANEL_W - 24, 70, COL.cardBg, 0.95);
       card.setStrokeStyle(1, COL.gold, 0.6).setDepth(9010);
       cards.push(card);
 
@@ -557,14 +556,14 @@ export class BattleScene extends Phaser.Scene {
       cards.push(status);
 
       // HP bar
-      const hpBg = this.add.rectangle(PANEL_X + 56, y + 32, 160, 8, 0x171a20, 1).setOrigin(0, 0.5).setDepth(9011);
-      const hp = this.add.rectangle(PANEL_X + 56, y + 32, (160 * unit.hp) / unit.maxHp, 8, 0x7ee08a, 1).setOrigin(0, 0.5).setDepth(9012);
+      const hpBg = this.add.rectangle(PANEL_X + 56, y + 32, 160, 8, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
+      const hp = this.add.rectangle(PANEL_X + 56, y + 32, (160 * unit.hp) / unit.maxHp, 8, COL.hp, 1).setOrigin(0, 0.5).setDepth(9012);
       const hpLabel = this.add.text(PANEL_X + 222, y + 32, String(unit.hp), textStyle(11, HEX.text)).setOrigin(1, 0.5).setDepth(9012);
       cards.push(hpBg, hp, hpLabel);
 
       // AP bar
-      const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 160, 6, 0x171a20, 1).setOrigin(0, 0.5).setDepth(9011);
-      const ap = this.add.rectangle(PANEL_X + 56, y + 48, (160 * unit.ap) / unit.maxAp, 6, 0xf0c14b, 1).setOrigin(0, 0.5).setDepth(9012);
+      const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 160, 6, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
+      const ap = this.add.rectangle(PANEL_X + 56, y + 48, (160 * unit.ap) / unit.maxAp, 6, COL.goldBright, 1).setOrigin(0, 0.5).setDepth(9012);
       const apLabel = this.add.text(PANEL_X + 222, y + 48, `${unit.ap} AP`, textStyle(10, HEX.goldPale)).setOrigin(1, 0.5).setDepth(9012);
       cards.push(apBg, ap, apLabel);
     });

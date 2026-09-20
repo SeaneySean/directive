@@ -23,14 +23,14 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(0x030405);
+    this.cameras.main.setBackgroundColor(COL.blackBg);
     const splash = this.add.image(WIDTH / 2, HEIGHT / 2, 'title-splash');
     const scale = Math.max(WIDTH / splash.width, HEIGHT / splash.height);
     splash.setScale(scale);
 
     this.add.text(WIDTH / 2, 120, 'ILLUMINATUS', displayStyle(64, HEX.gold, {
-      stroke: '#000000', strokeThickness: 6,
-    })).setOrigin(0.5).setShadow(0, 3, '#000000', 8, true, true);
+      stroke: HEX.blackPure, strokeThickness: 6,
+    })).setOrigin(0.5).setShadow(0, 3, HEX.blackPure, 8, true, true);
 
     const panelX = 545;
     const panelY = 420;
@@ -69,7 +69,7 @@ export class TitleScene extends Phaser.Scene {
 
   private confirmNewGame(): void {
     const container = this.add.container(0, 0).setDepth(20_000);
-    const backdrop = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x020305, 0.9)
+    const backdrop = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.overlay, 0.9)
       .setInteractive();
     const panel = this.add.rectangle(WIDTH / 2, HEIGHT / 2, 560, 210, COL.panel, 1)
       .setStrokeStyle(2, COL.gold);
@@ -83,7 +83,7 @@ export class TitleScene extends Phaser.Scene {
 
   private showCredits(): void {
     const container = this.add.container(0, 0).setDepth(20_000);
-    const backdrop = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x020305, 0.9)
+    const backdrop = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.overlay, 0.9)
       .setInteractive();
     const panel = this.add.rectangle(WIDTH / 2, HEIGHT / 2, 820, 510, COL.panel, 1)
       .setStrokeStyle(2, COL.gold);

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { ENDINGS } from '../game/strategy/endings.ts';
 import type { CampaignState } from '../game/strategy/types.ts';
 import { CAMPAIGN_REGISTRY_KEY } from './sceneGlue.ts';
-import { HEX, displayStyle, goldButton, textStyle } from './theme.ts';
+import { COL, HEX, displayStyle, goldButton, textStyle } from './theme.ts';
 
 export class EndingScene extends Phaser.Scene {
   constructor() {
@@ -10,7 +10,7 @@ export class EndingScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(0x030405);
+    this.cameras.main.setBackgroundColor(COL.blackBg);
     // Splash palette backing, dimmed behind the ending text.
     if (this.textures.exists('title-splash')) {
       const splash = this.add.image(640, 360, 'title-splash');
@@ -23,8 +23,8 @@ export class EndingScene extends Phaser.Scene {
     const won = state?.outcome === 'won';
 
     this.add.text(640, 230, ending.title.toUpperCase(), displayStyle(40, won ? HEX.gold : HEX.danger, {
-      stroke: '#000000', strokeThickness: 5,
-    })).setOrigin(0.5).setShadow(0, 3, '#000000', 8, true, true);
+      stroke: HEX.blackPure, strokeThickness: 5,
+    })).setOrigin(0.5).setShadow(0, 3, HEX.blackPure, 8, true, true);
     this.add.text(640, 310, [...ending.flavour], textStyle(17, HEX.textDim, {
       align: 'center', lineSpacing: 9,
     })).setOrigin(0.5);
