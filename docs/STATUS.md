@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 23 Sep 2026, 15:40. Deadline: 30 Sep 2026.
+Last updated: 23 Sep 2026, 17:20. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -12,7 +12,7 @@ Last updated: 23 Sep 2026, 15:40. Deadline: 30 Sep 2026.
 | 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, your sprites, portraits, event art) | merged on master |
 | 6c-tactics | Directional cover, holding guards, reinforcements, bigger maps | merged; hangar eased again after "too far the other way", objective now a light column |
 | 7a-rules | The three mission types and the map generator as rules (not yet visible in the game) | merged |
-| 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | Orpheus building now |
+| 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | merged; PLAY THIS |
 | 7b | Persistent squad: HP and kills carry over, promotions, deaths cost | after 7a |
 | 7c | Overwatch and grenades | after 7b |
 | 7d | Polish, Loom, Skool post | last |
@@ -20,7 +20,10 @@ Last updated: 23 Sep 2026, 15:40. Deadline: 30 Sep 2026.
 
 ## What I need from Sean
 
-1. **Play the hangar** on the eased build and report one line (won or lost, soldiers lost, turns):
+1. **Play the new build.** The world map now offers a mission in every region every turn
+   (recover technology, assassination, rival cabal), each costing an agent. Play two or three
+   and report each in one line (type, won or lost, soldiers lost, turns). Also the hangar if
+   you haven't:
    `cd ~/games/illuminatus-play && bun run dev` (the copy is already on the new build).
    Watch for: guards now stay by their cover; from round 4 the alarm brings extra guards at
    the far wall; camping no longer wins. Atlantis unlocks from the Mythology research route.

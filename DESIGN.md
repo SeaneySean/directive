@@ -131,6 +131,12 @@ Dates: slice 2 by 23 Sep, slice 3 by 25 Sep, slice 4 by 26 Sep, slice 5 by 28 Se
 Cut order if late: Atlantis becomes a second map on the Area 51 tileset; events drop to 3
 (Candidate, Leak, Whistleblower); Enlighten becomes a passive meter fed only by research.
 
+## Polish debt for 7d (Athena, 23 Sep)
+
+1. Offers panel hides Europe's and Russia's region cards; reposition or resize.
+2. Reserve space so offer text cannot run under LAUNCH.
+3. Objective-specific victory banners: TARGET DOWN, ITEM EXTRACTED.
+
 ## Balance notes for slice 6
 
 - The AI-vs-AI tactical harness is diagnostic only; it wins ~100% with honest enemy HP. Human
@@ -167,7 +173,7 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | merged 20 Sep |
 | 6c-tactics | Directional cover, holding guards, timed reinforcements, 20x20/22x22 maps, camper gate, 6b nits | worker → critic | merged 23 Sep; human difficulty gate open |
 | 7a-rules | Objective types (hold/recover/assassinate/clash), smart and flee stances, map generator, missions harness | worker → critic | merged 23 Sep |
-| 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | next |
-| 7b | Persistent squad, roster, promotions, replacements | worker → critic | |
+| 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | merged 23 Sep |
+| 7b | Persistent squad, roster, promotions, replacements | worker → critic | next |
 | 7c | Overwatch and grenades | worker → critic | |
 | 7d | Polish, Loom, Skool post | conductor | last |
