@@ -516,6 +516,16 @@ export class BattleScene extends Phaser.Scene {
     ], true);
     beacon.setDepth(3);
     this.tweens.add({ targets: beacon, alpha: { from: 0.35, to: 1 }, duration: 700, yoyo: true, repeat: -1 });
+    // A column of light above the tile, depth-sorted with the units, so the
+    // objective stays visible when guards or crates stand in front of it.
+    const column = this.track(this.add.graphics());
+    const h = tileW * 1.9;
+    column.fillStyle(COL.gold, 0.28).fillRect(centre.x - tileW * 0.16, centre.y - h, tileW * 0.32, h);
+    column.fillStyle(COL.gold, 0.55).fillRect(centre.x - tileW * 0.05, centre.y - h, tileW * 0.1, h);
+    column.setDepth(tileDepth(tile, 6) + 0.5);
+    this.tweens.add({ targets: column, alpha: { from: 0.5, to: 1 }, duration: 900, yoyo: true, repeat: -1 });
+    const label = this.track(this.add.text(centre.x, centre.y - h - 6, 'OBJECTIVE', textStyle(11, HEX.goldPale)).setOrigin(0.5, 1));
+    label.setDepth(tileDepth(tile, 6) + 0.6);
   }
 
   private drawPanel(): void {
