@@ -8,19 +8,25 @@ formula in Atlantis, and put a reality-TV star in the White House when a law nee
 Blend: Syndicate (1993) and UFO: Enemy Unknown (1994). A strategic world layer feeds turn-based
 isometric squad missions. Built for the September Comp, deadline **30 Sep 2026**.
 
-## Comp cut (what ships)
+## Comp cut v2 (decided 23 Sep with the designer: combat is the game)
 
-Two layers, two missions, one campaign that can be won or lost in 20 to 30 minutes.
+The strategic layer stays as built. The remaining week goes into making the combat layer the
+main loop, the way Syndicate and UFO: Enemy Unknown work: the world map exists to feed
+missions, and the squad that fights them is the thing you care about.
 
-1. **World screen**: 8 regions, 3 influence paths per region, one action per region per turn.
-2. **Research tree**: 10 nodes across 4 disciplines, one of which ends in AGI.
-3. **Events**: 5 scripted cards that fire on conditions.
-4. **Two tactical missions** launched from the world: Area 51 hangar, Atlantis ruins.
-5. **Win** by holding 5 regions or reaching AGI. **Lose** when Exposure hits 100.
+1. **Missions everywhere (7a).** Every region offers one mission per campaign turn, drawn
+   from three types on generated maps: **Recover technology** (reach the item tile, then get
+   the carrier back to your extraction edge), **Assassination** (kill a marked target with
+   bodyguards before they reach their exit), **Rival cabal** (eliminate a four-operative squad
+   that uses the smart squad AI). Winning gives that region a large influence jump on the
+   matching path. Area 51 and Atlantis remain as the two story missions.
+2. **The squad persists (7b).** Soldiers carry HP and kills between missions, heal per
+   campaign turn, promote at five kills, stay dead when killed, and cost treasury to replace.
+   Roster on the world screen.
+3. **Two more verbs (7c).** Overwatch and grenades.
+4. **Ship (7d).** Polish, Loom, Skool post. No mobile sizing, no shop, no new enemy classes.
 
-Everything else in the premise (more regions, dictators as units, 3D, a full Syndicate-style
-real-time layer) is the sequel. Narrow exceptions granted 23 Sep: hold-position enemy AI and
-finite timed reinforcements on the two missions (see tasks/slice-6c-tactics.md).
+Master stays shippable every night: the v1 cut is already a complete game.
 
 ## Strategic layer
 
@@ -160,4 +166,7 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 6a | Balance against a human + explanation layer (title, help, hints, briefings, hover text, save/load) | worker → critic | merged 20 Sep; human difficulty gate still pending Sean's playtest |
 | 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | merged 20 Sep |
 | 6c-tactics | Directional cover, holding guards, timed reinforcements, 20x20/22x22 maps, camper gate, 6b nits | worker → critic | merged 23 Sep; human difficulty gate open |
-| 6c-ship | Mobile sizing, Loom, Skool post | conductor | next |
+| 7a | Missions everywhere: three generated mission types per region | worker → critic | next |
+| 7b | Persistent squad, roster, promotions, replacements | worker → critic | |
+| 7c | Overwatch and grenades | worker → critic | |
+| 7d | Polish, Loom, Skool post | conductor | last |
