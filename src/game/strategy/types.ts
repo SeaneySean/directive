@@ -1,9 +1,24 @@
+import type { MissionType } from '../types.ts';
+
 export const PATHS = ['subvert', 'force', 'enlighten'] as const;
 
 export type InfluencePath = (typeof PATHS)[number];
 export type CampaignOutcome = 'playing' | 'won' | 'lost';
 export type EndingId = 'exposed' | 'machine-ascends' | 'quiet-throne' | 'pax-illuminata' | 'long-dawn';
 export type MissionStatus = 'in-progress' | 'completed' | 'failed';
+
+export type MissionOfferStatus = 'open' | 'launched' | 'won' | 'lost';
+
+/** A per-region, per-turn generated mission, frozen until the next campaign turn. */
+export interface MissionOffer {
+  /** Turn-scoped identity: `${regionId}:${turn}`, stable within a turn. */
+  id: string;
+  regionId: string;
+  type: MissionType;
+  path: InfluencePath;
+  seed: number;
+  status: MissionOfferStatus;
+}
 
 export interface MissionProgress {
   status: MissionStatus;
@@ -56,6 +71,10 @@ export interface CampaignState {
   firedEvents: string[];
   unlockedMissions: string[];
   missions: Record<string, MissionProgress>;
+  /** One frozen generated mission per region, regenerated each campaign turn. */
+  offers: MissionOffer[];
+  /** Agents consumed by launched generated missions this turn (0..agents). */
+  spentMissionAgents: number;
   bonusAgents: number;
   outcome: CampaignOutcome;
   endingId: EndingId | null;

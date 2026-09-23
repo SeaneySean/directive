@@ -1,10 +1,11 @@
 import { REGIONS } from './data.ts';
-import type { CampaignState, MissionProgress, RegionState } from './types.ts';
+import { generateOffers } from './missions.ts';
+import type { CampaignState, MissionOffer, MissionProgress, RegionState } from './types.ts';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 interface SaveEnvelope {
-  version: typeof SAVE_VERSION;
+  version: number;
   campaign: CampaignState;
 }
 
@@ -33,6 +34,16 @@ function isMissions(value: unknown): value is CampaignState['missions'] {
   return isRecord(value) && Object.values(value).every(isMissionProgress);
 }
 
+function isOffer(value: unknown): value is MissionOffer {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.regionId === 'string'
+    && ['recover', 'assassinate', 'clash'].includes(String(value.type))
+    && ['subvert', 'force', 'enlighten'].includes(String(value.path))
+    && isNumber(value.seed)
+    && ['open', 'launched', 'won', 'lost'].includes(String(value.status));
+}
+
 function isRegion(value: unknown, index: number): value is RegionState {
   if (!isRecord(value) || !isRecord(value.meters)) return false;
   const definition = REGIONS[index];
@@ -49,7 +60,8 @@ function isRegion(value: unknown, index: number): value is RegionState {
   );
 }
 
-function isCampaignState(value: unknown): value is CampaignState {
+/** Validates every pre-v2 field (offers and spentMissionAgents checked separately). */
+function isCampaignStateCore(value: unknown): value is CampaignState {
   if (!isRecord(value)) return false;
   const numericKeys = ['seed', 'turn', 'treasury', 'exposure', 'agents', 'researchPoints', 'bonusAgents'] as const;
   if (!numericKeys.every((key) => isNumber(value[key]))) return false;
@@ -74,6 +86,22 @@ function isCampaignState(value: unknown): value is CampaignState {
   ].includes(String(value.endingId));
 }
 
+function isCampaignState(value: unknown): value is CampaignState {
+  return isCampaignStateCore(value)
+    && isNumber(value.spentMissionAgents)
+    && Array.isArray(value.offers)
+    && value.offers.every(isOffer);
+}
+
+/** A version-1 save predates offers and spent mission agents; backfill them. */
+function migrateFromV1(campaign: CampaignState): CampaignState {
+  return {
+    ...campaign,
+    offers: generateOffers(campaign),
+    spentMissionAgents: 0,
+  };
+}
+
 export function serializeCampaign(campaign: CampaignState): string {
   const envelope: SaveEnvelope = { version: SAVE_VERSION, campaign };
   return JSON.stringify(envelope);
@@ -83,10 +111,16 @@ export function deserializeCampaign(raw: string | null): CampaignState | null {
   if (!raw) return null;
   try {
     const envelope: unknown = JSON.parse(raw);
-    if (!isRecord(envelope) || envelope.version !== SAVE_VERSION || !isCampaignState(envelope.campaign)) {
-      return null;
+    if (!isRecord(envelope) || typeof envelope.version !== 'number') return null;
+    if (envelope.version === SAVE_VERSION) {
+      if (!isCampaignState(envelope.campaign)) return null;
+      return structuredClone(envelope.campaign);
     }
-    return structuredClone(envelope.campaign);
+    if (envelope.version === 1) {
+      if (!isCampaignStateCore(envelope.campaign)) return null;
+      return migrateFromV1(structuredClone(envelope.campaign));
+    }
+    return null;
   } catch {
     return null;
   }

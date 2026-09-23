@@ -1,55 +1,26 @@
 import { nextRandom } from '../rng.ts';
 import { ACTIONS, REGIONS, STARTING_TREASURY } from './data.ts';
 import { pendingEvent } from './events.ts';
+import { generateOffers } from './missions.ts';
 import { advanceResearch } from './research.ts';
 import { PATHS } from './types.ts';
 import type {
   ActionDefinition,
   CampaignState,
-  InfluencePath,
   RegionState,
 } from './types.ts';
 
 const clamp = (value: number): number => Math.max(0, Math.min(100, value));
 
-function meterHasReachedTarget(region: RegionState): boolean {
-  return PATHS.some((path) => region.meters[path] >= 100);
-}
+import { checkOutcome, heldRegions } from './outcome.ts';
 
-export function heldRegions(state: CampaignState): RegionState[] {
-  return state.regions.filter((region) => region.held || meterHasReachedTarget(region));
-}
-
-export function checkOutcome(state: CampaignState): CampaignState {
-  if (state.exposure >= 100) return { ...state, outcome: 'lost', endingId: 'exposed' };
-  if (state.completedResearch.includes('cybernetics-3')) {
-    return { ...state, outcome: 'won', endingId: 'machine-ascends' };
-  }
-  if (heldRegions(state).length >= 5) {
-    const totals = PATHS.reduce<Record<InfluencePath, number>>((result, path) => {
-      result[path] = state.regions.reduce((sum, region) => sum + region.meters[path], 0);
-      return result;
-    }, { subvert: 0, force: 0, enlighten: 0 });
-    let dominant: InfluencePath = 'subvert';
-    for (const path of PATHS.slice(1)) {
-      if (totals[path] > totals[dominant]) dominant = path;
-    }
-    const endingIds = {
-      subvert: 'quiet-throne',
-      force: 'pax-illuminata',
-      enlighten: 'long-dawn',
-    } as const;
-    return { ...state, outcome: 'won', endingId: endingIds[dominant] };
-  }
-  return state.outcome === 'playing' && state.endingId === null
-    ? state
-    : { ...state, outcome: 'playing', endingId: null };
-}
+export { checkOutcome, heldRegions };
 
 export function createCampaign(seed: number): CampaignState {
-  return {
+  const turn = 1;
+  const base: CampaignState = {
     seed,
-    turn: 1,
+    turn,
     treasury: STARTING_TREASURY,
     exposure: 0,
     agents: 3,
@@ -67,10 +38,13 @@ export function createCampaign(seed: number): CampaignState {
     firedEvents: [],
     unlockedMissions: [],
     missions: {},
+    offers: [],
+    spentMissionAgents: 0,
     bonusAgents: 0,
     outcome: 'playing',
     endingId: null,
   };
+  return { ...base, offers: generateOffers(base) };
 }
 
 export function isActionAvailable(
@@ -82,7 +56,7 @@ export function isActionAvailable(
   const region = state.regions.find((candidate) => candidate.id === regionId);
   const action = ACTIONS[actionId];
   if (!region || !action || region.held || state.assignments[regionId]) return false;
-  if (Object.keys(state.assignments).length >= state.agents) return false;
+  if (Object.keys(state.assignments).length + state.spentMissionAgents >= state.agents) return false;
   if (action.requires && !state.completedResearch.includes(action.requires)) return false;
   if (actionCost(state, action) > state.treasury) return false;
   return !action.minimum || Object.entries(action.minimum).every(
@@ -163,7 +137,7 @@ export function endTurn(state: CampaignState): CampaignState {
   });
 
   const held = regions.filter((region) => region.held);
-  const next: CampaignState = {
+  const advanced: CampaignState = {
     ...state,
     seed,
     turn: state.turn + 1,
@@ -172,9 +146,12 @@ export function endTurn(state: CampaignState): CampaignState {
     agents: 3 + Math.floor(held.length / 2) + state.bonusAgents,
     regions,
     assignments: {},
+    offers: [],
+    spentMissionAgents: 0,
     outcome: 'playing',
   };
-  const researched = advanceResearch(next);
+  const withOffers: CampaignState = { ...advanced, offers: generateOffers(advanced) };
+  const researched = advanceResearch(withOffers);
   const withAgents = {
     ...researched,
     agents: researched.agents + (researched.completedResearch.includes('cybernetics-2') ? 1 : 0),
