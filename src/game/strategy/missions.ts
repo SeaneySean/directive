@@ -256,10 +256,8 @@ function applyOfferWin(region: RegionState, path: InfluencePath): RegionState {
  * campaign has ended. Recruiting consumes no strategic agent.
  */
 export function recruitSoldier(state: CampaignState): CampaignState {
-  if (state.outcome !== 'playing' || pendingEvent(state) || hasActiveMission(state)) return state;
-  if (state.treasury < RECRUIT_COST) return state;
+  if (!canRecruit(state)) return state;
   const index = state.roster.findIndex((soldier) => !soldier.alive);
-  if (index === -1) return state;
 
   const recruit: Soldier = {
     id: `r${state.recruitCount + 1}`,
@@ -277,4 +275,11 @@ export function recruitSoldier(state: CampaignState): CampaignState {
     treasury: state.treasury - RECRUIT_COST,
     recruitCount: state.recruitCount + 1,
   };
+}
+
+/** True when a replacement could be hired right now (a KIA slot and nothing blocking). */
+export function canRecruit(state: CampaignState): boolean {
+  if (state.outcome !== 'playing' || pendingEvent(state) || hasActiveMission(state)) return false;
+  if (state.treasury < RECRUIT_COST) return false;
+  return state.roster.some((soldier) => !soldier.alive);
 }
