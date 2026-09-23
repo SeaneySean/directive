@@ -1,6 +1,6 @@
 # Slice 7b — the squad persists
 
-Branch: `slice/7b-squad`. Owner: Orpheus. Reviewer: the critic.
+Branch: `slice/7b-squad`. Owner: Orpheus. Reviewer: the critic. Conductor-approved 23 Sep (Athena, 7 revisions applied).
 Depends on 7a (merged). Implements item 2 of DESIGN.md "Comp cut v2".
 
 ## Why
