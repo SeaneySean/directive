@@ -1,3 +1,4 @@
+import type { MissionType } from '../types.ts';
 import type { RegionDefinition } from './types.ts';
 
 export const ACTION_TEXT: Readonly<Record<string, string>> = {
@@ -88,7 +89,7 @@ export const HELP_PANELS: readonly HelpPanelCopy[] = [
   },
   {
     title: 'RESEARCH & MISSIONS',
-    body: 'Research unlocks stronger actions, exact intelligence, agents, and AGI.\nMissions secure the alien artefact and Aurichalcum needed for advanced research; losing costs 20 treasury but permits a later retry.',
+    body: 'Research unlocks agents, exact intelligence and AGI. Every region offers a mission each turn; winning flips a region fastest, and each launch spends one agent. Area 51 and Atlantis remain as story missions.',
   },
   {
     title: 'BATTLE CONTROLS',
@@ -97,7 +98,7 @@ export const HELP_PANELS: readonly HelpPanelCopy[] = [
 ];
 
 export function guideText(turn: number): string | null {
-  if (turn === 1) return 'Pick a region, assign an action, then END TURN. Watch Exposure.';
+  if (turn === 1) return 'Pick a region, assign an action or launch a mission, then END TURN. Watch Exposure.';
   if (turn === 2) return 'Choose a research project now; it advances every END TURN.';
   return null;
 }
@@ -122,5 +123,37 @@ export const MISSION_TEXT: Readonly<Record<string, MissionCopy>> = {
     objective: 'Reach the gold formula tile and hold it for 2 squad turns.',
     reward: 'Aurichalcum',
     reinforcementsNote: 'Once reinforcements stop, holding your starting position gains nothing: advance to secure the objective or eliminate the remaining defenders.',
+  },
+};
+
+export interface OfferCopy {
+  /** The mission's headline ("RECOVER TECHNOLOGY", etc.). */
+  name: string;
+  /** One-line objective shown in the briefing. */
+  objective: string;
+  /** Enemy composition for the briefing. */
+  enemies: string;
+  /** Exits or extraction description, or '' when the type has none. */
+  specials: string;
+}
+
+export const OFFER_TEXT: Readonly<Record<MissionType, OfferCopy>> = {
+  recover: {
+    name: 'RECOVER TECHNOLOGY',
+    objective: 'Reach the gold crate, pick it up, and carry it to the extraction edge.',
+    enemies: '4 holding guards',
+    specials: 'Extraction: the green tiles on the south edge',
+  },
+  assassinate: {
+    name: 'ASSASSINATION',
+    objective: 'Kill the marked target before it reaches a red exit.',
+    enemies: '1 fleeing target and 3 bodyguards',
+    specials: 'Exits: the red tiles on the east and west edges',
+  },
+  clash: {
+    name: 'RIVAL CABAL',
+    objective: 'Eliminate the rival cabal squad.',
+    enemies: '4 smart operatives',
+    specials: '',
   },
 };

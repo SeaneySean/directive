@@ -44,7 +44,7 @@ describe('strategy explanation text', () => {
     expect(HELP_PANELS).toHaveLength(4);
     for (const panel of HELP_PANELS) expect(panel.body.trim().split(/\s+/).length).toBeGreaterThan(0);
     expect(HELP_PANELS.every((panel) => panel.body.trim().split(/\s+/).length <= 40)).toBe(true);
-    expect(guideText(1)).toBe('Pick a region, assign an action, then END TURN. Watch Exposure.');
+    expect(guideText(1)).toBe('Pick a region, assign an action or launch a mission, then END TURN. Watch Exposure.');
     expect(guideText(2)).toContain('research');
     expect(guideText(3)).toBeNull();
   });

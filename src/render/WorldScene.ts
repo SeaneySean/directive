@@ -13,17 +13,26 @@ import {
 import { ACTIONS } from '../game/strategy/data.ts';
 import { pendingEvent, resolveEvent } from '../game/strategy/events.ts';
 import { MISSIONS, availableMissions, startMission } from '../game/strategy/missions.ts';
+import {
+  availableOffers,
+  launchOffer,
+  offerScenario,
+  OFFER_EXPOSURE,
+  OFFER_INFLUENCE_GAIN,
+  remainingAgents,
+} from '../game/strategy/missions.ts';
 import { RESEARCH, chooseResearch, isResearchAvailable } from '../game/strategy/research.ts';
 import {
   ACTION_TEXT,
   EVENT_CHOICE_TEXT,
   EVENT_CONTEXT,
   MISSION_TEXT,
+  OFFER_TEXT,
   RESEARCH_TEXT,
   guideText,
   regionDescription,
 } from '../game/strategy/text.ts';
-import type { CampaignState, InfluencePath, RegionState } from '../game/strategy/types.ts';
+import type { CampaignState, InfluencePath, MissionOffer, RegionState } from '../game/strategy/types.ts';
 import type { Scenario } from '../game/types.ts';
 import { showHelpOverlay } from './HelpOverlay.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
@@ -59,6 +68,7 @@ export class WorldScene extends Phaser.Scene {
   private objects: Phaser.GameObjects.GameObject[] = [];
   private hoverText!: Phaser.GameObjects.Text;
   private dismissedGuideTurns = new Set<number>();
+  private offersPage = 0;
 
   constructor() {
     super('world');
@@ -193,6 +203,21 @@ export class WorldScene extends Phaser.Scene {
       this.track(this.add.text(labelX, y - 3, meterPath[0]!.toUpperCase(), textStyle(11, PATH_HEX[meterPath]))).setDepth(5);
       this.track(this.add.text(valueX, y - 3, String(Math.round(shown)), textStyle(11, HEX.text))).setOrigin(1, 0).setDepth(5);
     });
+
+    // A small gold glyph marks a region with an open generated mission.
+    const openOffer = this.state.offers.find((offer) => offer.regionId === region.id && offer.status === 'open');
+    if (openOffer) {
+      const glyph = this.track(this.add.graphics()).setDepth(6);
+      const gx = centre.x + width / 2 - 11;
+      const gy = centre.y - height / 2 + 8;
+      glyph.fillStyle(COL.gold, 1);
+      glyph.fillPoints([
+        new Phaser.Geom.Point(gx, gy - 5),
+        new Phaser.Geom.Point(gx + 5, gy),
+        new Phaser.Geom.Point(gx, gy + 5),
+        new Phaser.Geom.Point(gx - 5, gy),
+      ], true);
+    }
   }
 
   private drawHud(): void {
@@ -202,7 +227,7 @@ export class WorldScene extends Phaser.Scene {
     this.track(this.add.text(PANEL_X + 16, 18, 'ILLUMINATUS', displayStyle(26, HEX.gold))).setDepth(11);
     this.track(this.add.text(PANEL_X + 16, 54, 'WORLD CONTROL', textStyle(12, HEX.dim))).setDepth(11);
 
-    const used = Object.keys(this.state.assignments).length;
+    const used = Object.keys(this.state.assignments).length + this.state.spentMissionAgents;
     this.track(this.add.text(PANEL_X + 16, 82, `TURN ${this.state.turn}`, textStyle(20, HEX.goldBright))).setDepth(11);
     this.track(this.add.text(PANEL_X + 16, 114, [
       `TREASURY  ${this.state.treasury}`,
@@ -262,33 +287,140 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawMissionsPanel(): void {
-    const x = 610;
-    this.track(drawPanel(this, 610, 36, 350, 76, { alpha: 0.97 })).setDepth(20);
-    this.track(this.add.text(x + 8, 42, 'MISSIONS', textStyle(12, HEX.gold))).setDepth(21);
+    const x = 600;
+    const top = 36;
+    const panelW = 388;
+    const depth = 20;
     const available = new Set(availableMissions(this.state).map((mission) => mission.id));
-    const listed = MISSIONS.filter((mission) =>
+    const story = MISSIONS.filter((mission) =>
       available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
     );
-    if (!listed.length) {
-      this.track(this.add.text(x + 8, 64, 'NO MISSIONS AVAILABLE', textStyle(11, HEX.faint))).setDepth(21);
-      return;
-    }
-    listed.forEach((mission, index) => {
-      const y = 62 + index * 24;
+    const open = availableOffers(this.state);
+    const pageSize = 5;
+    const pageCount = Math.max(1, Math.ceil(open.length / pageSize));
+    const page = Math.min(this.offersPage, pageCount - 1);
+    const pageOffers = open.slice(page * pageSize, (page + 1) * pageSize);
+    const canAct = this.state.outcome === 'playing' && !pendingEvent(this.state);
+    const agents = remainingAgents(this.state);
+
+    const rowH = 23;
+    const headerH = 20;
+    const gutterH = 12;
+    const navH = 22;
+    const storyH = story.length ? story.length * rowH : 0;
+    const offersH = open.length ? (pageOffers.length * rowH + gutterH) : 0;
+    const totalH = headerH + (storyH ? storyH + 6 : 0)
+      + (open.length ? 16 + offersH : 0)
+      + (open.length ? navH : 0) + 18;
+
+    this.track(drawPanel(this, x, top, panelW, totalH, { alpha: 0.97 })).setDepth(depth);
+    this.track(this.add.text(x + 8, top + 6, 'MISSIONS', textStyle(12, HEX.gold))).setDepth(depth + 1);
+    let y = top + headerH + 8;
+
+    // Story missions first, unchanged behaviour.
+    for (const mission of story) {
       const complete = this.state.missions[mission.id]?.status === 'completed';
       this.track(this.add.text(x + 8, y, `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
-        textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(21);
+        textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(depth + 1);
       if (!complete) {
-        const launch = this.track(goldButton(this, x + 272, y - 5, 'LAUNCH', () => {
+        const launch = this.track(goldButton(this, x + panelW - 82, y - 5, 'LAUNCH', () => {
           this.drawMissionBriefing(mission.id, mission.name, mission.scenario);
-        }, { size: 11, padding: { x: 5, y: 4 } }));
-        launch.setDepth(21);
-        if (pendingEvent(this.state)) {
+        }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(depth + 1);
+        if (!canAct) {
           launch.disableInteractive();
           launch.setAlpha(0.5);
         }
       }
-    });
+      y += rowH;
+    }
+
+    if (!open.length) {
+      if (!story.length) {
+        this.track(this.add.text(x + 8, y, 'NO MISSIONS AVAILABLE', textStyle(11, HEX.faint))).setDepth(depth + 1);
+      }
+      return;
+    }
+
+    y += 4;
+    this.track(this.add.text(x + 8, y, `REGIONAL MISSIONS  ${agents} AGENT${agents === 1 ? '' : 'S'} FREE`, textStyle(11, HEX.dim))).setDepth(depth + 1);
+    y += 16;
+
+    for (const offer of pageOffers) {
+      const region = this.state.regions.find((candidate) => candidate.id === offer.regionId);
+      const copy = OFFER_TEXT[offer.type];
+      const label = `${(region?.name ?? offer.regionId).toUpperCase()} · ${copy.name.split(' ')[0]} · +${OFFER_INFLUENCE_GAIN} ${offer.path.toUpperCase()}`;
+      this.track(this.add.text(x + 8, y, label, textStyle(11, HEX.text))).setDepth(depth + 1);
+      const launch = this.track(goldButton(this, x + panelW - 82, y - 5, 'LAUNCH', () => {
+        this.drawOfferBriefing(offer);
+      }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(depth + 1);
+      if (!canAct || agents <= 0) {
+        launch.disableInteractive();
+        launch.setAlpha(0.5);
+      }
+      y += rowH;
+    }
+
+    if (pageCount > 1) {
+      const navY = y + 4;
+      this.track(goldButton(this, x + panelW - 150, navY, 'PREV', () => {
+        this.offersPage = (page + pageCount - 1) % pageCount;
+        this.redraw();
+      }, { size: 10, padding: { x: 5, y: 3 } })).setDepth(depth + 1);
+      this.track(this.add.text(x + panelW - 82, navY + 1, `${page + 1}/${pageCount}`, textStyle(11, HEX.text)).setOrigin(0.5, 0)).setDepth(depth + 1);
+      this.track(goldButton(this, x + panelW - 52, navY, 'NEXT', () => {
+        this.offersPage = (page + 1) % pageCount;
+        this.redraw();
+      }, { size: 10, padding: { x: 5, y: 3 } })).setDepth(depth + 1);
+    }
+  }
+
+  private offerRewardExposure(offer: MissionOffer): number {
+    const base = OFFER_EXPOSURE[offer.type];
+    return offer.path === 'enlighten' ? Math.floor(base / 2) : base;
+  }
+
+  private drawOfferBriefing(offer: MissionOffer): void {
+    const copy = OFFER_TEXT[offer.type];
+    const region = this.state.regions.find((candidate) => candidate.id === offer.regionId);
+    const scenario = offerScenario(this.state, offer.id);
+    const objects: Phaser.GameObjects.GameObject[] = [];
+    const add = <T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth>(object: T): T => {
+      object.setDepth(18_000);
+      objects.push(object);
+      return object;
+    };
+    add(this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, COL.overlay, 0.92)).setInteractive();
+    add(this.add.rectangle(640, 372, 900, 560, COL.panel, 1)).setStrokeStyle(2, COL.gold);
+    add(this.add.rectangle(590, 236, 820, 292, COL.overlay, 0.62));
+    add(this.add.text(210, 96, `MISSION BRIEFING // ${copy.name}`, displayStyle(22, HEX.gold)));
+    add(this.add.text(210, 150, `${(region?.name ?? offer.regionId).toUpperCase()} · OPERATING ON THE ${offer.path.toUpperCase()} PATH`, textStyle(14, HEX.dim)));
+    add(this.add.text(210, 178, copy.objective, textStyle(16, HEX.text, { wordWrap: { width: 780 } })));
+
+    const alienCount = scenario.units.filter((unit) => unit.team === 'alien').length;
+    const reinf = scenario.reinforcements;
+    const lines = [
+      `ENEMIES: ${copy.enemies} (${alienCount} total)`,
+      copy.specials ? `SPECIALS: ${copy.specials}` : '',
+      reinf ? `REINFORCEMENTS: up to ${reinf.max} more, first on round ${reinf.fromRound}, then every ${reinf.every} rounds` : '',
+      '',
+      'AGENT COST: 1 agent this turn',
+      `REWARD ON SUCCESS: +${OFFER_INFLUENCE_GAIN} ${offer.path.toUpperCase()} in this region, Resistance -5`,
+      `EXPOSURE: +${this.offerRewardExposure(offer)} ${offer.path === 'enlighten' ? '(halved on the Enlighten path)' : ''}`,
+      'FAILURE: -20 treasury',
+    ].filter((line) => line !== '');
+    add(this.add.text(210, 244, lines, textStyle(16, HEX.textDim, { lineSpacing: 8, wordWrap: { width: 800 } })));
+    add(goldButton(this, 350, 600, 'BACK', () => objects.forEach((object) => object.destroy()), {
+      size: 17,
+      padding: { x: 12, y: 7 },
+    }));
+    add(goldButton(this, 780, 600, 'GO', () => {
+      const next = launchOffer(this.state, offer.id);
+      if (next === this.state) return;
+      this.state = next;
+      this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
+      writeCampaignSave(next);
+      this.scene.start('battle', { offerId: offer.id });
+    }, { size: 17, padding: { x: 12, y: 7 } }));
   }
 
   private drawMissionBriefing(missionId: 'area-51' | 'atlantis', missionName: string, scenario: Scenario): void {
