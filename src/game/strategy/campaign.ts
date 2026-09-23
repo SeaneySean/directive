@@ -3,6 +3,7 @@ import { ACTIONS, REGIONS, STARTING_TREASURY } from './data.ts';
 import { pendingEvent } from './events.ts';
 import { generateOffers } from './missions.ts';
 import { advanceResearch } from './research.ts';
+import { freshRoster } from './roster.ts';
 import { PATHS } from './types.ts';
 import type {
   ActionDefinition,
@@ -40,6 +41,8 @@ export function createCampaign(seed: number): CampaignState {
     missions: {},
     offers: [],
     spentMissionAgents: 0,
+    roster: freshRoster(),
+    recruitCount: 0,
     bonusAgents: 0,
     outcome: 'playing',
     endingId: null,
@@ -148,6 +151,9 @@ export function endTurn(state: CampaignState): CampaignState {
     assignments: {},
     offers: [],
     spentMissionAgents: 0,
+    roster: state.roster.map((soldier) =>
+      soldier.alive ? { ...soldier, hp: Math.min(soldier.maxHp, soldier.hp + 3) } : soldier,
+    ),
     outcome: 'playing',
   };
   const withOffers: CampaignState = { ...advanced, offers: generateOffers(advanced) };

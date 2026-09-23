@@ -12,7 +12,14 @@ import {
 } from '../game/strategy/campaign.ts';
 import { ACTIONS } from '../game/strategy/data.ts';
 import { pendingEvent, resolveEvent } from '../game/strategy/events.ts';
-import { MISSIONS, availableMissions, startMission } from '../game/strategy/missions.ts';
+import {
+  MISSIONS,
+  availableMissions,
+  canRecruit,
+  recruitSoldier,
+  startMission,
+} from '../game/strategy/missions.ts';
+import { livingSoldiers, RECRUIT_COST } from '../game/strategy/roster.ts';
 import {
   availableOffers,
   launchOffer,
@@ -32,7 +39,7 @@ import {
   guideText,
   regionDescription,
 } from '../game/strategy/text.ts';
-import type { CampaignState, InfluencePath, MissionOffer, RegionState } from '../game/strategy/types.ts';
+import type { CampaignState, InfluencePath, MissionOffer, RegionState, Soldier } from '../game/strategy/types.ts';
 import type { Scenario } from '../game/types.ts';
 import { showHelpOverlay } from './HelpOverlay.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
@@ -69,6 +76,7 @@ export class WorldScene extends Phaser.Scene {
   private hoverText!: Phaser.GameObjects.Text;
   private dismissedGuideTurns = new Set<number>();
   private offersPage = 0;
+  private squadsTab = false;
 
   constructor() {
     super('world');
@@ -90,6 +98,10 @@ export class WorldScene extends Phaser.Scene {
     }
     for (const id of ['area-51', 'atlantis']) {
       this.load.image(`briefing-${id}`, `assets/art/briefing-${id}.jpg`);
+    }
+    // Agent portraits for the squad panel (recruits fall back to initials).
+    for (const name of ['cole', 'diaz', 'okafor', 'reyes']) {
+      this.load.image(`portrait-${name}`, `assets/art/portraits/${name}.jpg`);
     }
   }
 
@@ -291,6 +303,22 @@ export class WorldScene extends Phaser.Scene {
     const top = 36;
     const panelW = 388;
     const depth = 20;
+    const tabH = 26;
+
+    const squadTab = this.track(goldButton(this, x + 92, top + 3, 'SQUAD', () => {
+      if (!this.squadsTab) { this.squadsTab = true; this.redraw(); }
+    }, { size: 10, padding: { x: 7, y: 4 } })).setDepth(depth + 2);
+    const missionTab = this.track(goldButton(this, x + 8, top + 3, 'MISSIONS', () => {
+      if (this.squadsTab) { this.squadsTab = false; this.redraw(); }
+    }, { size: 10, padding: { x: 7, y: 4 } })).setDepth(depth + 2);
+    (this.squadsTab ? squadTab : missionTab).setBackgroundColor(HEX.goldHover);
+
+    if (this.squadsTab) {
+      this.drawSquadPanel(x, top + tabH + 8, panelW, depth);
+      return;
+    }
+
+    const contentTop = top + tabH + 8;
     const available = new Set(availableMissions(this.state).map((mission) => mission.id));
     const story = MISSIONS.filter((mission) =>
       available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
@@ -302,20 +330,19 @@ export class WorldScene extends Phaser.Scene {
     const pageOffers = open.slice(page * pageSize, (page + 1) * pageSize);
     const canAct = this.state.outcome === 'playing' && !pendingEvent(this.state);
     const agents = remainingAgents(this.state);
+    const noSquad = livingSoldiers(this.state).length === 0;
 
     const rowH = 23;
-    const headerH = 20;
     const gutterH = 12;
     const navH = 22;
     const storyH = story.length ? story.length * rowH : 0;
     const offersH = open.length ? (pageOffers.length * rowH + gutterH) : 0;
-    const totalH = headerH + (storyH ? storyH + 6 : 0)
+    const totalH = (storyH ? storyH + 6 : 0)
       + (open.length ? 16 + offersH : 0)
       + (open.length ? navH : 0) + 18;
 
-    this.track(drawPanel(this, x, top, panelW, totalH, { alpha: 0.97 })).setDepth(depth);
-    this.track(this.add.text(x + 8, top + 6, 'MISSIONS', textStyle(12, HEX.gold))).setDepth(depth + 1);
-    let y = top + headerH + 8;
+    this.track(drawPanel(this, x, contentTop, panelW, totalH, { alpha: 0.97 })).setDepth(depth);
+    let y = contentTop + 12;
 
     // Story missions first, unchanged behaviour.
     for (const mission of story) {
@@ -323,10 +350,10 @@ export class WorldScene extends Phaser.Scene {
       this.track(this.add.text(x + 8, y, `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
         textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(depth + 1);
       if (!complete) {
-        const launch = this.track(goldButton(this, x + panelW - 82, y - 5, 'LAUNCH', () => {
+        const launch = this.track(goldButton(this, x + panelW - 82, y - 5, noSquad ? 'NO SQUAD' : 'LAUNCH', () => {
           this.drawMissionBriefing(mission.id, mission.name, mission.scenario);
         }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(depth + 1);
-        if (!canAct) {
+        if (!canAct || noSquad) {
           launch.disableInteractive();
           launch.setAlpha(0.5);
         }
@@ -350,10 +377,10 @@ export class WorldScene extends Phaser.Scene {
       const copy = OFFER_TEXT[offer.type];
       const label = `${(region?.name ?? offer.regionId).toUpperCase()} · ${copy.name.split(' ')[0]} · +${OFFER_INFLUENCE_GAIN} ${offer.path.toUpperCase()}`;
       this.track(this.add.text(x + 8, y, label, textStyle(11, HEX.text))).setDepth(depth + 1);
-      const launch = this.track(goldButton(this, x + panelW - 82, y - 5, 'LAUNCH', () => {
+      const launch = this.track(goldButton(this, x + panelW - 82, y - 5, noSquad ? 'NO SQUAD' : 'LAUNCH', () => {
         this.drawOfferBriefing(offer);
       }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(depth + 1);
-      if (!canAct || agents <= 0) {
+      if (!canAct || agents <= 0 || noSquad) {
         launch.disableInteractive();
         launch.setAlpha(0.5);
       }
@@ -371,6 +398,73 @@ export class WorldScene extends Phaser.Scene {
         this.offersPage = (page + 1) % pageCount;
         this.redraw();
       }, { size: 10, padding: { x: 5, y: 3 } })).setDepth(depth + 1);
+    }
+  }
+
+  /** The four soldier slots, each with portrait, name, rank, HP and career kills. */
+  private drawSquadPanel(x: number, top: number, panelW: number, depth: number): void {
+    const roster = this.state.roster;
+    const living = roster.filter((soldier) => soldier.alive).length;
+    const anyKia = roster.some((soldier) => !soldier.alive);
+
+    const rowH = 52;
+    const warningH = living === 0 ? 20 : 0;
+    const recruitH = anyKia ? 36 : 0;
+    const totalH = roster.length * rowH + warningH + recruitH + 20;
+
+    this.track(drawPanel(this, x, top, panelW, totalH, { alpha: 0.97 })).setDepth(depth);
+    let y = top + 8;
+
+    roster.forEach((soldier) => {
+      this.drawSquadSlot(x, y, panelW, soldier, depth);
+      y += rowH;
+    });
+
+    if (living === 0) {
+      this.track(this.add.text(x + 8, y + 2, 'NO SOLDIERS LEFT — RECRUIT A REPLACEMENT', textStyle(11, HEX.danger))).setDepth(depth + 1);
+      y += warningH;
+    }
+
+    if (anyKia) {
+      const allowed = canRecruit(this.state);
+      const recruit = this.track(goldButton(this, x + 8, y + 4, `RECRUIT  —  TREASURY ${RECRUIT_COST}`, () => {
+        this.state = recruitSoldier(this.state);
+        this.redraw();
+      }, { size: 11, padding: { x: 8, y: 7 } })).setDepth(depth + 1);
+      if (!allowed) {
+        recruit.disableInteractive();
+        recruit.setAlpha(0.5);
+      }
+    }
+  }
+
+  private drawSquadSlot(x: number, y: number, panelW: number, soldier: Soldier, depth: number): void {
+    const card = this.track(this.add.rectangle(x + panelW / 2, y + 23, panelW - 20, 46, COL.cardBg, 0.95));
+    card.setStrokeStyle(1, COL.gold, soldier.alive ? 0.55 : 0.25).setDepth(depth + 1);
+
+    const portraitKey = `portrait-${soldier.name.toLowerCase()}`;
+    if (this.textures.exists(portraitKey)) {
+      const portrait = this.track(this.add.image(x + 15, y + 23, portraitKey));
+      portrait.setDisplaySize(42, 42).setDepth(depth + 2);
+    } else {
+      this.track(this.add.circle(x + 15, y + 23, 20, COL.goldDim, 1)).setDepth(depth + 2);
+      this.track(this.add.text(x + 15, y + 23, soldier.name.slice(0, 2).toUpperCase(), textStyle(13, HEX.black, { fontStyle: 'bold' })))
+        .setOrigin(0.5).setDepth(depth + 3);
+    }
+
+    this.track(this.add.text(x + 42, y + 2, soldier.name.toUpperCase(), textStyle(11, soldier.alive ? HEX.text : HEX.faint)))
+      .setDepth(depth + 2);
+    this.track(this.add.text(x + 42, y + 16, soldier.rank === 1 ? 'OPERATIVE' : 'AGENT', textStyle(9, soldier.rank === 1 ? HEX.goldPale : HEX.dim)))
+      .setDepth(depth + 2);
+
+    const hpW = 96;
+    this.track(this.add.rectangle(x + 42, y + 34, hpW, 7, COL.hpBg, 1).setOrigin(0, 0.5)).setDepth(depth + 2);
+    this.track(this.add.rectangle(x + 42, y + 34, (hpW * soldier.hp) / soldier.maxHp, 7, soldier.alive ? COL.hp : COL.miss, 1).setOrigin(0, 0.5)).setDepth(depth + 3);
+    this.track(this.add.text(x + 42 + hpW + 8, y + 34, `${soldier.hp}/${soldier.maxHp}`, textStyle(10, HEX.text)).setOrigin(0, 0.5)).setDepth(depth + 3);
+
+    this.track(this.add.text(x + panelW - 10, y + 16, `${soldier.kills} KILLS`, textStyle(10, HEX.textDim)).setOrigin(1, 0)).setDepth(depth + 2);
+    if (!soldier.alive) {
+      this.track(this.add.text(x + panelW - 10, y + 2, 'KIA', textStyle(10, HEX.danger)).setOrigin(1, 0)).setDepth(depth + 2);
     }
   }
 

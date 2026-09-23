@@ -74,6 +74,8 @@ export interface GameState {
   reinforcementsSpawned: number;
   /** Living unit id carrying the recovered item, or null when not carried. */
   carrierId: string | null;
+  /** Kills credited to each attacker this battle, keyed by unit id. */
+  killsBy: Record<string, number>;
 }
 
 export type ObjectiveKind = 'hold' | 'recover' | 'assassinate' | 'clash';

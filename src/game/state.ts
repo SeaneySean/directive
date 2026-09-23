@@ -44,6 +44,7 @@ export function createGame(scenario: Scenario, seed = 1): GameState {
     reinforcements,
     reinforcementsSpawned: 0,
     carrierId: null,
+    killsBy: {},
   };
 }
 
@@ -123,6 +124,10 @@ export function shoot(state: GameState, attackerId: string, targetId: string): S
   let next: GameState = { ...state, seed };
   next = replaceUnit(next, { ...attacker, ap: attacker.ap - 1 });
   next = replaceUnit(next, { ...target, hp, alive: !killed && target.alive });
+  if (killed) {
+    // A living hostile died: credit the killing blow to the attacker.
+    next = { ...next, killsBy: { ...next.killsBy, [attacker.id]: (next.killsBy[attacker.id] ?? 0) + 1 } };
+  }
   const verb = killed ? 'kills' : hit ? `hits for ${damage}` : 'misses';
   next = log(next, `${attacker.name} ${verb} ${target.name} (${preview.chance}%)`);
   if (killed && next.carrierId === targetId) {
