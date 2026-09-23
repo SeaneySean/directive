@@ -188,7 +188,7 @@ describe('state', () => {
     expect(livingUnits(result!.state, 'alien').length).toBe(0);
   });
   test('killing every enemy still wins an objective mission', () => {
-    const objective = { ...small, objective: { tile: { x: 1, y: 4 }, holdRounds: 2 } };
+    const objective = { ...small, objective: { kind: 'hold' as const, tile: { x: 1, y: 4 }, holdRounds: 2 } };
     let result = shoot(createGame(objective, 1), 's', 'a');
     for (let seed = 2; !result?.killed && seed < 50; seed++) {
       result = shoot(createGame(objective, seed), 's', 'a');
@@ -212,7 +212,7 @@ describe('state', () => {
   test('wins after holding an objective for consecutive player turns', () => {
     const objective: Scenario = {
       ...small,
-      objective: { tile: { x: 1, y: 1 }, holdRounds: 2 },
+      objective: { kind: 'hold', tile: { x: 1, y: 1 }, holdRounds: 2 },
     };
     let state = createGame(objective);
     state = endTurn(state);
@@ -227,7 +227,7 @@ describe('state', () => {
   test('moving off the objective loses accumulated hold progress', () => {
     const objective: Scenario = {
       ...small,
-      objective: { tile: { x: 1, y: 1 }, holdRounds: 2 },
+      objective: { kind: 'hold', tile: { x: 1, y: 1 }, holdRounds: 2 },
     };
     let state = endTurn(createGame(objective));
     state = endTurn(state);
@@ -240,8 +240,8 @@ describe('state', () => {
 
 describe('mission scenarios', () => {
   test('Area 51 and Atlantis use the fixed squad and enemy statistics', () => {
-    expect(AREA51_HANGAR.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
-    expect(ATLANTIS_RUINS.objective).toEqual({ tile: expect.any(Object), holdRounds: 2 });
+    expect(AREA51_HANGAR.objective).toEqual({ kind: 'hold', tile: expect.any(Object), holdRounds: 2 });
+    expect(ATLANTIS_RUINS.objective).toEqual({ kind: 'hold', tile: expect.any(Object), holdRounds: 2 });
     expect(AREA51_HANGAR.units.filter((unit) => unit.team === 'alien')).toHaveLength(3);
     expect(ATLANTIS_RUINS.units.filter((unit) => unit.team === 'alien')).toHaveLength(4);
     expect([...AREA51_HANGAR.units, ...ATLANTIS_RUINS.units]
@@ -262,9 +262,12 @@ describe('mission scenarios', () => {
     for (const scenario of [AREA51_HANGAR, ATLANTIS_RUINS]) {
       const squad = scenario.units.filter((unit) => unit.team === 'squad');
       expect(squad.every((unit) => scenario.rows[unit.pos.y - 1]?.[unit.pos.x] === 'c')).toBe(true);
-      expect(scenario.objective!.tile.x).toBeGreaterThanOrEqual(6);
-      expect(scenario.objective!.tile.x).toBeLessThanOrEqual(11);
-      expect(scenario.objective!.tile.y).toBeLessThan(8);
+      const objective = scenario.objective!;
+      expect(objective.kind).toBe('hold');
+      if (objective.kind !== 'hold') throw new Error('expected a hold objective');
+      expect(objective.tile.x).toBeGreaterThanOrEqual(6);
+      expect(objective.tile.x).toBeLessThanOrEqual(11);
+      expect(objective.tile.y).toBeLessThan(8);
     }
   });
 });
@@ -319,7 +322,7 @@ describe('ai', () => {
         { ...small.units[0]!, id: 's', pos: { x: 1, y: 3 }, weapon: { ...small.units[0]!.weapon, range: 1 } },
         { ...small.units[1]!, id: 'a', pos: { x: 6, y: 1 }, weapon: { ...small.units[1]!.weapon, range: 1 } },
       ],
-      objective: { tile: { x: 5, y: 1 }, holdRounds: 2 },
+      objective: { kind: 'hold', tile: { x: 5, y: 1 }, holdRounds: 2 },
     };
     expect(squadPolicy(createGame(scenario), 's')).toEqual({ kind: 'move', unitId: 's', to: { x: 2, y: 1 } });
   });
@@ -332,7 +335,7 @@ describe('ai', () => {
         { ...small.units[0]!, id: 's', pos: { x: 1, y: 3 }, move: 3, weapon: { ...small.units[0]!.weapon, range: 1 } },
         { ...small.units[1]!, id: 'a', pos: { x: 3, y: 1 }, weapon: { ...small.units[1]!.weapon, range: 1 } },
       ],
-      objective: { tile: { x: 5, y: 3 }, holdRounds: 2 },
+      objective: { kind: 'hold', tile: { x: 5, y: 3 }, holdRounds: 2 },
     };
     expect(squadPolicy(createGame(scenario), 's')).toEqual({ kind: 'move', unitId: 's', to: { x: 3, y: 3 } });
   });
@@ -556,7 +559,7 @@ describe('reinforcements', () => {
 
   test('completing the objective wins before spawning', () => {
     const objective = reinf({ fromRound: 1 });
-    objective.objective = { tile: { x: 1, y: 1 }, holdRounds: 1 };
+    objective.objective = { kind: 'hold', tile: { x: 1, y: 1 }, holdRounds: 1 };
     // Soldier starts on the objective tile; the first squad turn end wins.
     const state = endTurn(createGame(objective));
     expect(state.outcome).toBe('won');
