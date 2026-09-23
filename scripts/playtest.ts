@@ -2,6 +2,7 @@
 // Usage:
 //   bun run playtest [games=200] [scenario=Farmstead]
 //   bun run playtest --campaign [games=200]
+//   bun run playtest --missions [total=300]   (100 generated missions of each type)
 
 import {
   canAct,
@@ -16,6 +17,7 @@ import {
   type AiPolicy,
   type GameState,
 } from '../src/game/index.ts';
+import { generateMission, type MissionType } from '../src/game/mapgen.ts';
 import { nextRandom } from '../src/game/rng.ts';
 import {
   assignAction,
@@ -26,7 +28,7 @@ import {
 import { pendingEvent, resolveEvent } from '../src/game/strategy/events.ts';
 import { availableMissions, completeMission, startMission } from '../src/game/strategy/missions.ts';
 import { RESEARCH, chooseResearch, isResearchAvailable } from '../src/game/strategy/research.ts';
-import type { CampaignState } from '../src/game/strategy/types.ts';
+import type { CampaignState, InfluencePath } from '../src/game/strategy/types.ts';
 
 const pct = (count: number, total: number) => `${((100 * count) / total).toFixed(1)}%`;
 const MAX_CAMPAIGN_TURNS = 40;
@@ -238,8 +240,41 @@ function runBattles(games: number, scenarioName: string): void {
   console.log(battleLine(`${scenario.name} camper`, simulateBattles(games, scenario, camperPolicy), games));
 }
 
+function runMissions(total: number): void {
+  const types: MissionType[] = ['recover', 'assassinate', 'clash'];
+  const paths: InfluencePath[] = ['subvert', 'force', 'enlighten'];
+  const perType = Math.max(1, Math.floor(total / types.length));
+
+  for (const type of types) {
+    let won = 0;
+    let lost = 0;
+    let stalled = 0;
+    const stalls: string[] = [];
+    for (let i = 1; i <= perType; i++) {
+      const path = paths[(i - 1) % paths.length]!;
+      const seed = i;
+      const scenario = generateMission(type, path, seed);
+      let state = createGame(scenario, seed);
+      for (let turn = 0; turn < 400 && state.outcome === 'playing'; turn++) {
+        state = runTeamTurn(state, state.turn, state.turn === 'squad' ? squadPolicy : decide).state;
+      }
+      if (state.outcome === 'won') won++;
+      else if (state.outcome === 'lost') lost++;
+      else {
+        stalled++;
+        stalls.push(`${type} ${path} seed ${seed}`);
+      }
+    }
+    console.log(`  ${type}: won ${won}/${perType} (${pct(won, perType)})  lost ${lost} (${pct(lost, perType)})  stalled ${stalled}`);
+    for (const stall of stalls) console.log(`    STALLED: ${stall}`);
+  }
+}
+
+const missionsFlag = process.argv.indexOf('--missions');
 const campaignFlag = process.argv.indexOf('--campaign');
-if (campaignFlag >= 0) {
+if (missionsFlag >= 0) {
+  runMissions(Number(process.argv[missionsFlag + 1] ?? 300));
+} else if (campaignFlag >= 0) {
   runCampaigns(Number(process.argv[campaignFlag + 1] ?? 200));
 } else {
   runBattles(Number(process.argv[2] ?? 200), process.argv[3] ?? SCENARIOS[0]!.name);

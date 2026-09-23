@@ -6,3 +6,4 @@ export * from './combat.ts';
 export * from './state.ts';
 export * from './ai.ts';
 export * from './scenarios.ts';
+export * from './mapgen.ts';

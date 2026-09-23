@@ -69,6 +69,7 @@ export function missionScenario(state: CampaignState, id: MissionId): Scenario {
   const definition = MISSIONS.find((mission) => mission.id === id);
   if (!definition) throw new Error(`unknown mission ${id}`);
   const upgrade = hasResearchGrant(state, 'plasma-small-arms');
+  const objective = definition.scenario.objective;
   return {
     ...definition.scenario,
     rows: [...definition.scenario.rows],
@@ -77,8 +78,8 @@ export function missionScenario(state: CampaignState, id: MissionId): Scenario {
       pos: { ...unit.pos },
       weapon: upgrade && unit.team === 'squad' ? { ...PLASMA } : { ...unit.weapon },
     })),
-    objective: definition.scenario.objective
-      ? { ...definition.scenario.objective, tile: { ...definition.scenario.objective.tile } }
+    objective: objective?.kind === 'hold'
+      ? { kind: 'hold', tile: { ...objective.tile }, holdRounds: objective.holdRounds }
       : undefined,
   };
 }

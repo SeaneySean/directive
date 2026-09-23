@@ -2,9 +2,23 @@ import { previewShot } from './combat.ts';
 import { inBounds, isWalkable, parseMap, same } from './map.ts';
 import { reachable } from './pathfinding.ts';
 import { rollPercent } from './rng.ts';
-import type { GameState, Reinforcements, Scenario, Team, Unit, Vec } from './types.ts';
+import type { GameState, Reinforcements, Scenario, ScenarioObjective, Team, Unit, Vec } from './types.ts';
 
 // All functions here are pure: they take a state and return a new one.
+
+/** Deep copy an objective so games never share mutable objective fields. */
+function cloneObjective(objective: ScenarioObjective): ScenarioObjective {
+  switch (objective.kind) {
+    case 'hold':
+      return { kind: 'hold', tile: { ...objective.tile }, holdRounds: objective.holdRounds };
+    case 'recover':
+      return { kind: 'recover', tile: { ...objective.tile }, extraction: objective.extraction.map((e) => ({ ...e })) };
+    case 'assassinate':
+      return { kind: 'assassinate', targetId: objective.targetId, exits: objective.exits.map((e) => ({ ...e })) };
+    case 'clash':
+      return { kind: 'clash' };
+  }
+}
 
 export function createGame(scenario: Scenario, seed = 1): GameState {
   const reinforcements: Reinforcements | undefined = scenario.reinforcements
@@ -25,12 +39,11 @@ export function createGame(scenario: Scenario, seed = 1): GameState {
     seed,
     log: [{ round: 1, text: `Mission: ${scenario.name}` }],
     outcome: 'playing',
-    objective: scenario.objective
-      ? { tile: { ...scenario.objective.tile }, holdRounds: scenario.objective.holdRounds }
-      : undefined,
+    objective: scenario.objective ? cloneObjective(scenario.objective) : undefined,
     objectiveHoldRounds: 0,
     reinforcements,
     reinforcementsSpawned: 0,
+    carrierId: null,
   };
 }
 
@@ -112,28 +125,105 @@ export function shoot(state: GameState, attackerId: string, targetId: string): S
   next = replaceUnit(next, { ...target, hp, alive: !killed && target.alive });
   const verb = killed ? 'kills' : hit ? `hits for ${damage}` : 'misses';
   next = log(next, `${attacker.name} ${verb} ${target.name} (${preview.chance}%)`);
+  if (killed && next.carrierId === targetId) {
+    // The carrier dropped the item where it fell; any squad unit may reclaim it.
+    next = { ...next, carrierId: null };
+    if (next.objective?.kind === 'recover') {
+      next = { ...next, objective: { ...next.objective, tile: { ...target.pos } } };
+      next = log(next, 'The item drops where the carrier fell.');
+    }
+  }
   next = checkOutcome(next);
   return { state: next, hit, chance: preview.chance, roll, damage, killed };
 }
 
 export function checkOutcome(state: GameState): GameState {
   if (state.outcome !== 'playing') return state;
-  if (livingUnits(state, 'alien').length === 0) return log({ ...state, outcome: 'won' }, 'Area secured.');
+
+  // Assassination: the target falling ends the mission immediately, even with
+  // other hostiles still on the field.
+  if (state.objective?.kind === 'assassinate') {
+    const targetId = state.objective.targetId;
+    const target = state.units.find((u) => u.id === targetId);
+    if (target && !target.alive) return log({ ...state, outcome: 'won' }, 'Target down.');
+  }
+
   if (livingUnits(state, 'squad').length === 0) return log({ ...state, outcome: 'lost' }, 'Squad lost.');
+
+  // Recover: killing every enemy does not win; play continues until extraction.
+  if (state.objective?.kind === 'recover') return state;
+
+  if (livingUnits(state, 'alien').length === 0) return log({ ...state, outcome: 'won' }, 'Area secured.');
+  return state;
+}
+
+/**
+ * Hostile ends an alien turn on an assassination exit: the target slipped away.
+ * Runs at the end of the alien turn (before handing control back to the squad).
+ */
+function targetEscaped(state: GameState): boolean {
+  const objective = state.objective;
+  if (!objective || objective.kind !== 'assassinate') return false;
+  const target = state.units.find((u) => u.id === objective.targetId);
+  if (!target || !target.alive) return false;
+  return objective.exits.some((e) => same(e, target.pos));
+}
+
+/** Living squad unit acting as the recover carrier, or undefined. */
+function carrier(state: GameState): Unit | undefined {
+  if (!state.carrierId) return undefined;
+  return state.units.find((u) => u.id === state.carrierId && u.alive);
+}
+
+/** Handle objective rules that resolve when the squad ends its turn. */
+function resolveSquadObjective(state: GameState): GameState {
+  const objective = state.objective;
+  if (!objective) return state;
+
+  if (objective.kind === 'hold') {
+    const holding = livingUnits(state, 'squad').some((unit) => same(unit.pos, objective.tile));
+    const objectiveHoldRounds = holding ? state.objectiveHoldRounds + 1 : 0;
+    if (objectiveHoldRounds >= objective.holdRounds) {
+      return log({ ...state, objectiveHoldRounds, outcome: 'won' }, 'Objective secured.');
+    }
+    return { ...state, objectiveHoldRounds };
+  }
+
+  if (objective.kind === 'recover') {
+    const holder = carrier(state);
+    if (holder) {
+      // Held: win when the living carrier ends a squad turn on an extraction tile.
+      if (objective.extraction.some((e) => same(e, holder.pos))) {
+        return log({ ...state, outcome: 'won' }, 'Item extracted.');
+      }
+      return state;
+    }
+    // On the ground: a living squad unit ending its turn on the item picks it up.
+    const picker = livingUnits(state, 'squad').find((u) => same(u.pos, objective.tile));
+    if (!picker) return state;
+    const next = log({ ...state, carrierId: picker.id }, `${picker.name} recovers the item.`);
+    // Pickup on an extraction tile is not possible (item sits on the far third),
+    // but if it were, extraction is only evaluated on a later turn.
+    return next;
+  }
+
+  // assassinate and clash need no squad-end-of-turn objective logic.
   return state;
 }
 
 /** Hand the turn to the other team and refill their AP. */
 export function endTurn(state: GameState): GameState {
   if (state.outcome !== 'playing') return state;
+
   if (state.turn === 'squad' && state.objective) {
-    const holding = livingUnits(state, 'squad').some((unit) => same(unit.pos, state.objective!.tile));
-    const objectiveHoldRounds = holding ? state.objectiveHoldRounds + 1 : 0;
-    if (objectiveHoldRounds >= state.objective.holdRounds) {
-      return log({ ...state, objectiveHoldRounds, outcome: 'won' }, 'Objective secured.');
-    }
-    state = { ...state, objectiveHoldRounds };
+    state = resolveSquadObjective(state);
+    if (state.outcome !== 'playing') return state;
   }
+
+  if (state.turn === 'alien' && targetEscaped(state)) {
+    return log({ ...state, outcome: 'lost' }, 'Target escaped.');
+  }
+
   const nextTeam: Team = state.turn === 'squad' ? 'alien' : 'squad';
   const round = nextTeam === 'squad' ? state.round + 1 : state.round;
   const units = state.units.map((u) => (u.team === nextTeam && u.alive ? { ...u, ap: u.maxAp } : u));

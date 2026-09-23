@@ -109,7 +109,7 @@ export const AREA51_HANGAR: Scenario = {
     alien('g2', 'Guard', 12, 3, GUARD_RIFLE, 14, 'hold'),
     alien('g3', 'Guard', 9, 6, GUARD_RIFLE, 14, 'hold'),
   ],
-  objective: { tile: { x: 9, y: 4 }, holdRounds: 2 },
+  objective: { kind: 'hold', tile: { x: 9, y: 4 }, holdRounds: 2 },
   reinforcements: {
     fromRound: 6,
     every: 3,
@@ -154,7 +154,7 @@ export const ATLANTIS_RUINS: Scenario = {
     alien('u3', 'Guardian Gamma', 9, 2, GUARDIAN_WEAPON, 16, 'hold'),
     alien('u4', 'Guardian Delta', 10, 5, GUARDIAN_WEAPON, 16, 'hold'),
   ],
-  objective: { tile: { x: 10, y: 4 }, holdRounds: 2 },
+  objective: { kind: 'hold', tile: { x: 10, y: 4 }, holdRounds: 2 },
   reinforcements: {
     fromRound: 5,
     every: 2,

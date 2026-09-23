@@ -232,8 +232,9 @@ export class BattleScene extends Phaser.Scene {
     }
     const sel = selectedUnit(state);
     if (!sel) return 'Select a soldier.';
-    if (state.objective) {
-      const onTile = livingUnits(state, 'squad').some((unit) => unit.pos.x === state.objective!.tile.x && unit.pos.y === state.objective!.tile.y);
+    if (state.objective?.kind === 'hold') {
+      const tile = state.objective.tile;
+      const onTile = livingUnits(state, 'squad').some((unit) => unit.pos.x === tile.x && unit.pos.y === tile.y);
       if (onTile) return `Objective: hold the gold tile for ${state.objective.holdRounds} of your turns (${state.objectiveHoldRounds}/${state.objective.holdRounds}). Keep someone on it and END TURN.`;
     }
     if (sel.ap === 2) return 'Green tiles: move (1 AP). Hover an enemy for hit chance, click to shoot (1 AP).';
@@ -399,7 +400,7 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    if (this.state.objective) {
+    if (this.state.objective?.kind === 'hold') {
       this.drawObjectiveBeacon(this.state.objective.tile);
     }
 
@@ -532,7 +533,7 @@ export class BattleScene extends Phaser.Scene {
     const state = this.state;
     const sel = selectedUnit(state);
     const lines = [`ILLUMINATUS  //  ${this.scenario.name.toUpperCase()}`, `Round ${state.round}   ${state.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
-    if (state.objective) {
+    if (state.objective?.kind === 'hold') {
       lines.push('Reach the gold tile and hold it', `Hold: ${state.objectiveHoldRounds}/${state.objective.holdRounds} turns  or kill all enemies`, '');
     }
     if (sel) {
