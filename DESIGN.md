@@ -137,6 +137,7 @@ Cut order if late: Atlantis becomes a second map on the Area 51 tileset; events 
 1. Offers panel hides Europe's and Russia's region cards; reposition or resize.
 2. Reserve space so offer text cannot run under LAUNCH.
 3. Objective-specific victory banners: TARGET DOWN, ITEM EXTRACTED.
+4. Debrief: fold the old casualties/survivors summary into the per-soldier list.
 
 ## Balance notes for slice 6
 
@@ -175,7 +176,7 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 6c-tactics | Directional cover, holding guards, timed reinforcements, 20x20/22x22 maps, camper gate, 6b nits | worker → critic | merged 23 Sep; human difficulty gate open |
 | 7a-rules | Objective types (hold/recover/assassinate/clash), smart and flee stances, map generator, missions harness | worker → critic | merged 23 Sep |
 | 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | merged 23 Sep |
-| 7b | Persistent squad, roster, promotions, replacements | worker → critic | building |
-| 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | after 7b |
+| 7b | Persistent squad, roster, promotions, replacements | worker → critic | merged 23 Sep |
+| 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | next |
 | 7c | Overwatch and grenades | worker → critic | |
 | 7d | Polish, Loom, Skool post | conductor | last |
