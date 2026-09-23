@@ -82,6 +82,7 @@ export class BattleScene extends Phaser.Scene {
   private returning = false;
   private tiles!: TileSpec;
   private layout!: TileLayout;
+  private campaign!: CampaignState;
   /** Scale factor from the 60x30 reference tiles for terrain and sprites. */
   private tileScale = 1;
   /** A reinforcement arrival detected on the current enemy turn (for feedback). */
@@ -118,6 +119,7 @@ export class BattleScene extends Phaser.Scene {
 
   create(): void {
     const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
+    this.campaign = campaign;
     if (this.offerId) {
       this.scenario = offerScenario(campaign, this.offerId);
     } else if (this.missionId) {
@@ -196,8 +198,8 @@ export class BattleScene extends Phaser.Scene {
     this.returning = true;
     const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
     const next = this.offerId
-      ? completeOffer(campaign, this.offerId, result)
-      : completeMission(campaign, this.missionId!, result);
+      ? completeOffer(campaign, this.offerId, result, this.state)
+      : completeMission(campaign, this.missionId!, result, this.state);
     this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
     writeCampaignSave(next);
     this.time.delayedCall(900, () => this.showDebrief(result, campaign, next));
@@ -237,11 +239,25 @@ export class BattleScene extends Phaser.Scene {
       lines.push(`Survivors: ${squad.length - fallen.length} of ${squad.length}`);
     }
     this.banner.setVisible(false);
-    this.add.rectangle(this.layout.origin.x, 360, 620, 330, COL.panelDark, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
+    lines.push('');
+    lines.push('SQUAD RESULTS');
+    for (const soldier of after.roster) {
+      const prev = before.roster.find((candidate) => candidate.id === soldier.id) ?? soldier;
+      const kills = soldier.kills - prev.kills;
+      const promoted = prev.rank === 0 && soldier.rank === 1;
+      if (!soldier.alive) {
+        lines.push(`${soldier.name.toUpperCase()}  —  KIA`);
+      } else {
+        const hp = prev.hp === soldier.hp ? `HP ${soldier.hp}` : `HP ${prev.hp}→${soldier.hp}`;
+        const killNote = kills === 1 ? '+1 kill' : `+${kills} kills`;
+        lines.push(`${soldier.name.toUpperCase()}  ${hp}  ${killNote}${promoted ? '  → OPERATIVE' : ''}`);
+      }
+    }
+    this.add.rectangle(this.layout.origin.x, 366, 620, 372, COL.panelDark, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
     this.add.text(this.layout.origin.x, 300, lines, {
-      fontFamily: '"IBM Plex Mono", monospace', fontSize: '17px', color: result === 'won' ? HEX.goldPale : HEX.text, align: 'center', lineSpacing: 8,
+      fontFamily: '"IBM Plex Mono", monospace', fontSize: '14px', color: result === 'won' ? HEX.goldPale : HEX.text, align: 'center', lineSpacing: 6,
     }).setOrigin(0.5).setDepth(10011);
-    goldButton(this, this.layout.origin.x - 80, 470, 'RETURN TO WORLD', () => this.scene.start('world'))
+    goldButton(this, this.layout.origin.x - 80, 522, 'RETURN TO WORLD', () => this.scene.start('world'))
       .setOrigin(0.5).setDepth(10011);
   }
 
@@ -699,19 +715,22 @@ export class BattleScene extends Phaser.Scene {
 
       const name = this.add.text(PANEL_X + 56, y + 8, unit.name.toUpperCase(), textStyle(12, unit.alive ? HEX.text : HEX.faint)).setDepth(9011);
       cards.push(name);
+      const rosterSoldier = this.campaign.roster.find((soldier) => soldier.id === unit.id);
+      const rank = this.add.text(PANEL_X + 56, y + 23, rosterSoldier?.rank === 1 ? 'OPERATIVE' : 'AGENT', textStyle(9, rosterSoldier?.rank === 1 ? HEX.goldPale : HEX.dim)).setDepth(9011);
+      cards.push(rank);
       const status = this.add.text(PANEL_X + 220, y + 8, unit.alive ? '' : 'KIA', textStyle(11, HEX.danger)).setOrigin(1, 0).setDepth(9011);
       cards.push(status);
 
       // HP bar: the value sits right of the bar, never over it.
-      const hpBg = this.add.rectangle(PANEL_X + 56, y + 32, 150, 8, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
-      const hp = this.add.rectangle(PANEL_X + 56, y + 32, (150 * unit.hp) / unit.maxHp, 8, COL.hp, 1).setOrigin(0, 0.5).setDepth(9012);
-      const hpLabel = this.add.text(PANEL_X + 214, y + 32, String(unit.hp), textStyle(11, HEX.text)).setOrigin(0, 0.5).setDepth(9012);
+      const hpBg = this.add.rectangle(PANEL_X + 56, y + 40, 150, 8, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
+      const hp = this.add.rectangle(PANEL_X + 56, y + 40, (150 * unit.hp) / unit.maxHp, 8, COL.hp, 1).setOrigin(0, 0.5).setDepth(9012);
+      const hpLabel = this.add.text(PANEL_X + 214, y + 40, String(unit.hp), textStyle(11, HEX.text)).setOrigin(0, 0.5).setDepth(9012);
       cards.push(hpBg, hp, hpLabel);
 
       // AP bar
-      const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 150, 6, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
-      const ap = this.add.rectangle(PANEL_X + 56, y + 48, (150 * unit.ap) / unit.maxAp, 6, COL.goldBright, 1).setOrigin(0, 0.5).setDepth(9012);
-      const apLabel = this.add.text(PANEL_X + 214, y + 48, `${unit.ap} AP`, textStyle(11, HEX.goldPale)).setOrigin(0, 0.5).setDepth(9012);
+      const apBg = this.add.rectangle(PANEL_X + 56, y + 56, 150, 6, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
+      const ap = this.add.rectangle(PANEL_X + 56, y + 56, (150 * unit.ap) / unit.maxAp, 6, COL.goldBright, 1).setOrigin(0, 0.5).setDepth(9012);
+      const apLabel = this.add.text(PANEL_X + 214, y + 56, `${unit.ap} AP`, textStyle(11, HEX.goldPale)).setOrigin(0, 0.5).setDepth(9012);
       cards.push(apBg, ap, apLabel);
     });
     this.boardObjects.push(...cards);
