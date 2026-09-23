@@ -166,7 +166,8 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 6a | Balance against a human + explanation layer (title, help, hints, briefings, hover text, save/load) | worker → critic | merged 20 Sep; human difficulty gate still pending Sean's playtest |
 | 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | merged 20 Sep |
 | 6c-tactics | Directional cover, holding guards, timed reinforcements, 20x20/22x22 maps, camper gate, 6b nits | worker → critic | merged 23 Sep; human difficulty gate open |
-| 7a | Missions everywhere: three generated mission types per region | worker → critic | next |
+| 7a-rules | Objective types (hold/recover/assassinate/clash), smart and flee stances, map generator, missions harness | worker → critic | merged 23 Sep |
+| 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | next |
 | 7b | Persistent squad, roster, promotions, replacements | worker → critic | |
 | 7c | Overwatch and grenades | worker → critic | |
 | 7d | Polish, Loom, Skool post | conductor | last |

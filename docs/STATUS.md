@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 23 Sep 2026, 15:00. Deadline: 30 Sep 2026.
+Last updated: 23 Sep 2026, 15:40. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -11,7 +11,8 @@ Last updated: 23 Sep 2026, 15:00. Deadline: 30 Sep 2026.
 | 6a+ | Mission maps redrawn by hand after "still unplayable": open floors, scattered cover, three-hit guards | on master, needs your playtest |
 | 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, your sprites, portraits, event art) | merged on master |
 | 6c-tactics | Directional cover, holding guards, reinforcements, bigger maps | merged; hangar eased again after "too far the other way", objective now a light column |
-| 7a | Missions everywhere: recover technology, assassination, rival cabal, on generated maps, one offer per region per turn | brief written, Athena reviewing, Orpheus next |
+| 7a-rules | The three mission types and the map generator as rules (not yet visible in the game) | merged |
+| 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | Orpheus building now |
 | 7b | Persistent squad: HP and kills carry over, promotions, deaths cost | after 7a |
 | 7c | Overwatch and grenades | after 7b |
 | 7d | Polish, Loom, Skool post | last |
