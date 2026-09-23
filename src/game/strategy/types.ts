@@ -9,6 +9,28 @@ export type MissionStatus = 'in-progress' | 'completed' | 'failed';
 
 export type MissionOfferStatus = 'open' | 'launched' | 'won' | 'lost';
 
+/** Base squad loadout, chosen per soldier; not a shop. */
+export type WeaponId = 'rifle' | 'shotgun';
+
+/** Squad rank: 0 = "Agent", 1 = "Operative" (achieved at five career kills). */
+export type Rank = 0 | 1;
+
+/**
+ * A persistent squad member carried on the campaign between missions. Killed
+ * soldiers stay in the roster (retaining their identity until replaced) so the
+ * roster always has four slots.
+ */
+export interface Soldier {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  kills: number;
+  rank: Rank;
+  alive: boolean;
+  weapon: WeaponId;
+}
+
 /** A per-region, per-turn generated mission, frozen until the next campaign turn. */
 export interface MissionOffer {
   /** Turn-scoped identity: `${regionId}:${turn}`, stable within a turn. */
@@ -75,6 +97,10 @@ export interface CampaignState {
   offers: MissionOffer[];
   /** Agents consumed by launched generated missions this turn (0..agents). */
   spentMissionAgents: number;
+  /** The four persistent squad members, in roster order (KIA entries retained). */
+  roster: Soldier[];
+  /** Number of recruits hired so far; drives deterministic recruit ids/names. */
+  recruitCount: number;
   bonusAgents: number;
   outcome: CampaignOutcome;
   endingId: EndingId | null;

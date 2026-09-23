@@ -1,8 +1,9 @@
 import { REGIONS } from './data.ts';
 import { generateOffers } from './missions.ts';
-import type { CampaignState, MissionOffer, MissionProgress, RegionState } from './types.ts';
+import { freshRoster } from './roster.ts';
+import type { CampaignState, MissionOffer, MissionProgress, RegionState, Soldier } from './types.ts';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 interface SaveEnvelope {
   version: number;
@@ -15,6 +16,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Non-negative integer (career kills, recruit counter). */
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -60,6 +66,28 @@ function isRegion(value: unknown, index: number): value is RegionState {
   );
 }
 
+/** Validates a single roster soldier: ids, values, HP bounds and alive/HP. */
+function isSoldier(value: unknown): value is Soldier {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string' || typeof value.name !== 'string') return false;
+  if (!isNumber(value.hp) || !isNumber(value.maxHp)) return false;
+  if (!isCount(value.kills)) return false;
+  if (value.rank !== 0 && value.rank !== 1) return false;
+  if (typeof value.alive !== 'boolean') return false;
+  if (value.weapon !== 'rifle' && value.weapon !== 'shotgun') return false;
+  if (value.hp < 0 || value.maxHp <= 0 || value.hp > value.maxHp) return false;
+  // alive/HP consistency: living soldiers have positive HP, KIA have none.
+  if (value.alive !== value.hp > 0) return false;
+  return true;
+}
+
+/** Four uniquely-identified roster slots. */
+function isRoster(value: unknown): value is Soldier[] {
+  if (!Array.isArray(value) || value.length !== 4) return false;
+  if (!value.every(isSoldier)) return false;
+  return new Set(value.map((soldier) => soldier.id)).size === 4;
+}
+
 /** Validates every pre-v2 field (offers and spentMissionAgents checked separately). */
 function isCampaignStateCore(value: unknown): value is CampaignState {
   if (!isRecord(value)) return false;
@@ -86,20 +114,33 @@ function isCampaignStateCore(value: unknown): value is CampaignState {
   ].includes(String(value.endingId));
 }
 
-function isCampaignState(value: unknown): value is CampaignState {
+/** Every field added since v1, save the roster (offers, spent agents). */
+function isCampaignStateV2(value: unknown): value is CampaignState {
   return isCampaignStateCore(value)
     && isNumber(value.spentMissionAgents)
     && Array.isArray(value.offers)
     && value.offers.every(isOffer);
 }
 
-/** A version-1 save predates offers and spent mission agents; backfill them. */
+/** A full current (v3) campaign: v2 fields plus a valid roster and recruit count. */
+function isCampaignState(value: unknown): value is CampaignState {
+  return isCampaignStateV2(value)
+    && isRoster(value.roster)
+    && isCount(value.recruitCount);
+}
+
+/** A version-2 save predates the roster; seed a fresh one without touching progress. */
+function migrateFromV2(campaign: CampaignState): CampaignState {
+  return { ...campaign, roster: freshRoster(), recruitCount: 0 };
+}
+
+/** A version-1 save predates offers and spent agents too; backfill both, then the roster. */
 function migrateFromV1(campaign: CampaignState): CampaignState {
-  return {
+  return migrateFromV2({
     ...campaign,
     offers: generateOffers(campaign),
     spentMissionAgents: 0,
-  };
+  });
 }
 
 export function serializeCampaign(campaign: CampaignState): string {
@@ -115,6 +156,10 @@ export function deserializeCampaign(raw: string | null): CampaignState | null {
     if (envelope.version === SAVE_VERSION) {
       if (!isCampaignState(envelope.campaign)) return null;
       return structuredClone(envelope.campaign);
+    }
+    if (envelope.version === 2) {
+      if (!isCampaignStateV2(envelope.campaign)) return null;
+      return migrateFromV2(structuredClone(envelope.campaign));
     }
     if (envelope.version === 1) {
       if (!isCampaignStateCore(envelope.campaign)) return null;
