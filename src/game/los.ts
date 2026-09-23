@@ -38,16 +38,22 @@ export function hasLineOfSight(grid: Grid, a: Vec, b: Vec): boolean {
 
 /**
  * A target is in cover from a shooter when a cover tile is adjacent to the
- * target on the shooter's side (the cover lies between them, roughly).
+ * target and lies within 60 degrees of the direction to the shooter: with `d`
+ * the unit vector from target to the cover tile and `s` the unit vector from
+ * target to the shooter, cover counts only when `d . s >= 0.5`.
  */
 export function inCover(grid: Grid, target: Vec, shooter: Vec): boolean {
   if (same(target, shooter)) return false;
   const toShooter = { x: shooter.x - target.x, y: shooter.y - target.y };
+  const shooterLen = Math.hypot(toShooter.x, toShooter.y);
+  if (shooterLen === 0) return false;
+  const s = { x: toShooter.x / shooterLen, y: toShooter.y / shooterLen };
   for (const n of neighbors4(target)) {
     if (tileAt(grid, n) !== 'cover') continue;
+    // Cardinal adjacency: d is already a unit vector.
     const d = { x: n.x - target.x, y: n.y - target.y };
-    const dot = d.x * toShooter.x + d.y * toShooter.y;
-    if (dot > 0) return true;
+    const dot = d.x * s.x + d.y * s.y;
+    if (dot >= 0.5) return true;
   }
   return false;
 }

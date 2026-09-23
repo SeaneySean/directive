@@ -3,7 +3,19 @@
 //   bun run playtest [games=200] [scenario=Farmstead]
 //   bun run playtest --campaign [games=200]
 
-import { createGame, decide, runTeamTurn, SCENARIOS, squadPolicy, type AiPolicy } from '../src/game/index.ts';
+import {
+  canAct,
+  createGame,
+  decide,
+  livingUnits,
+  previewShot,
+  runTeamTurn,
+  SCENARIOS,
+  squadPolicy,
+  unitById,
+  type AiPolicy,
+  type GameState,
+} from '../src/game/index.ts';
 import { nextRandom } from '../src/game/rng.ts';
 import {
   assignAction,
@@ -194,6 +206,27 @@ function battleLine(label: string, result: BattleResult, games: number): string 
   return `${label}: won ${result.won}/${games} (${pct(result.won, games)})  lost ${result.lost} (${pct(result.lost, games)})  stalled ${result.stalled}  avg rounds ${(result.rounds / games).toFixed(1)}  avg survivors ${result.won ? (result.survivors / result.won).toFixed(2) : '-'}`;
 }
 
+/**
+ * The automated anti-camping regression policy: the squad never moves and only
+ * shoots. Target selection reuses the smart policy's lowest-HP, then highest
+ * hit-chance, then unit-id ordering, but waits whenever no legal shot exists.
+ */
+function camperPolicy(state: GameState, unitId: string): AiStep {
+  const unit = unitById(state, unitId);
+  const enemies = livingUnits(state, unit.team === 'alien' ? 'squad' : 'alien');
+  if (!canAct(state, unit) || enemies.length === 0) return { kind: 'wait', unitId };
+  const shots = enemies.flatMap((enemy) => {
+    const preview = previewShot(state.grid, unit, enemy);
+    return preview ? [{ enemy, chance: preview.chance }] : [];
+  }).sort((left, right) =>
+    left.enemy.hp - right.enemy.hp
+    || right.chance - left.chance
+    || left.enemy.id.localeCompare(right.enemy.id),
+  );
+  if (shots[0]) return { kind: 'shoot', unitId, targetId: shots[0].enemy.id };
+  return { kind: 'wait', unitId };
+}
+
 function runBattles(games: number, scenarioName: string): void {
   const scenario = SCENARIOS.find((candidate) => candidate.name === scenarioName);
   if (!scenario) {
@@ -202,6 +235,7 @@ function runBattles(games: number, scenarioName: string): void {
   }
   console.log(battleLine(`${scenario.name} baseline`, simulateBattles(games, scenario, decide), games));
   console.log(battleLine(`${scenario.name} smart squad`, simulateBattles(games, scenario, squadPolicy), games));
+  console.log(battleLine(`${scenario.name} camper`, simulateBattles(games, scenario, camperPolicy), games));
 }
 
 const campaignFlag = process.argv.indexOf('--campaign');

@@ -106,6 +106,8 @@ export interface MissionCopy {
   why: string;
   objective: string;
   reward: string;
+  /** Shown after the reinforcement line; warns that camping never pays. */
+  reinforcementsNote?: string;
 }
 
 export const MISSION_TEXT: Readonly<Record<string, MissionCopy>> = {
@@ -113,10 +115,12 @@ export const MISSION_TEXT: Readonly<Record<string, MissionCopy>> = {
     why: 'A leaked Nevada hangar contains technology that can transform your arsenal. Reach it before the guards erase every trace.',
     objective: 'Reach the gold artefact tile and hold it for 2 squad turns.',
     reward: 'Alien artefact and -10 Exposure',
+    reinforcementsNote: 'Once reinforcements stop, holding your starting position gains nothing: advance to secure the objective or eliminate the remaining defenders.',
   },
   atlantis: {
     why: 'The ruins preserve the Aurichalcum formula required by your final research programme. Guardians still defend the flooded archive.',
     objective: 'Reach the gold formula tile and hold it for 2 squad turns.',
     reward: 'Aurichalcum',
+    reinforcementsNote: 'Once reinforcements stop, holding your starting position gains nothing: advance to secure the objective or eliminate the remaining defenders.',
   },
 };

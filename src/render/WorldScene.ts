@@ -24,6 +24,7 @@ import {
   regionDescription,
 } from '../game/strategy/text.ts';
 import type { CampaignState, InfluencePath, RegionState } from '../game/strategy/types.ts';
+import type { Scenario } from '../game/types.ts';
 import { showHelpOverlay } from './HelpOverlay.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
 import { COL, HEX, crtScanlines, displayStyle, drawPanel, goldButton, textStyle } from './theme.ts';
@@ -279,11 +280,7 @@ export class WorldScene extends Phaser.Scene {
         textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(21);
       if (!complete) {
         const launch = this.track(goldButton(this, x + 272, y - 5, 'LAUNCH', () => {
-          this.drawMissionBriefing(
-            mission.id,
-            mission.name,
-            mission.scenario.units.filter((unit) => unit.team === 'alien').length,
-          );
+          this.drawMissionBriefing(mission.id, mission.name, mission.scenario);
         }, { size: 11, padding: { x: 5, y: 4 } }));
         launch.setDepth(21);
         if (pendingEvent(this.state)) {
@@ -294,7 +291,7 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private drawMissionBriefing(missionId: 'area-51' | 'atlantis', missionName: string, enemyCount: number): void {
+  private drawMissionBriefing(missionId: 'area-51' | 'atlantis', missionName: string, scenario: Scenario): void {
     const copy = MISSION_TEXT[missionId]!;
     const objects: Phaser.GameObjects.GameObject[] = [];
     const add = <T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth>(object: T): T => {
@@ -310,17 +307,27 @@ export class WorldScene extends Phaser.Scene {
       backdrop.setScale(scale);
       backdrop.setCrop(0, 0, 880 / scale, 300 / scale);
     }
+    // Scrim: translucent dark band behind the text so the first lines read
+    // against the backdrop illustration.
+    add(this.add.rectangle(590, 236, 820, 292, COL.overlay, 0.62));
     add(this.add.text(210, 96, `MISSION BRIEFING // ${missionName.toUpperCase()}`, displayStyle(22, HEX.gold)));
     add(this.add.text(210, 168, copy.why, textStyle(16, HEX.text, { wordWrap: { width: 780 } })));
-    add(this.add.text(210, 244, [
+
+    const alienCount = scenario.units.filter((unit) => unit.team === 'alien').length;
+    const reinf = scenario.reinforcements;
+    const lines = [
       `OBJECTIVE: ${copy.objective}`,
       '',
       'WIN: Hold the objective for 2 squad turns.',
-      'OR: Eliminate every enemy.',
+      'OR: Eliminate every enemy on the field.',
       '',
-      `ENEMIES: ${enemyCount}`,
+      `ENEMIES: ${alienCount}`,
+      reinf ? `REINFORCEMENTS: up to ${reinf.max} more, first on round ${reinf.fromRound}, then every ${reinf.every} rounds` : '',
+      reinf && copy.reinforcementsNote ? copy.reinforcementsNote : '',
+      reinf ? 'Clearing every enemy on the field still wins immediately, even if more are due.' : '',
       `REWARD: ${copy.reward}`,
-    ], textStyle(16, HEX.textDim, { lineSpacing: 8 })));
+    ];
+    add(this.add.text(210, 244, lines, textStyle(16, HEX.textDim, { lineSpacing: 8, wordWrap: { width: 800 } })));
     add(goldButton(this, 350, 600, 'BACK', () => objects.forEach((object) => object.destroy()), {
       size: 17,
       padding: { x: 12, y: 7 },

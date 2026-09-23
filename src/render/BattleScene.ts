@@ -25,13 +25,12 @@ import { completeMission, missionScenario, type MissionId } from '../game/strate
 import type { CampaignState } from '../game/strategy/types.ts';
 import { MISSION_TEXT } from '../game/strategy/text.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
-import { gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
+import { boardLayout, gridToScreen, screenToGrid, tileDepth, TILE_W, type TileLayout } from './iso.ts';
 import { COL, HEX, displayStyle, goldButton, textStyle } from './theme.ts';
 
 export { TILE_H, TILE_W } from './iso.ts';
 export const PANEL_W = 280;
 
-const BOARD_ORIGIN = { x: 490, y: 78 };
 const PANEL_X = 1000;
 const ASSET_PATH = 'assets/';
 
@@ -81,6 +80,11 @@ export class BattleScene extends Phaser.Scene {
   private busy = false;
   private returning = false;
   private tiles!: TileSpec;
+  private layout!: TileLayout;
+  /** Scale factor from the 60x30 reference tiles for terrain and sprites. */
+  private tileScale = 1;
+  /** A reinforcement arrival detected on the current enemy turn (for feedback). */
+  private alarm: { pos: Vec; round: number } | null = null;
 
   constructor() {
     super('battle');
@@ -119,6 +123,8 @@ export class BattleScene extends Phaser.Scene {
     }
     this.state = createGame(this.scenario, Date.now() % 100000);
     this.tiles = this.missionId === 'atlantis' ? ATLANTIS_TILES : HANGAR_TILES;
+    this.layout = boardLayout(this.state.grid.width, this.state.grid.height);
+    this.tileScale = this.layout.tileW / TILE_W;
 
     this.add.rectangle(PANEL_X, 0, PANEL_W, 720, COL.panelDark, 0.96).setOrigin(0).setDepth(9000);
     this.add.rectangle(PANEL_X, 0, 2, 720, COL.gold, 0.55).setOrigin(0).setDepth(9001);
@@ -136,7 +142,7 @@ export class BattleScene extends Phaser.Scene {
       padding: { x: 6, y: 4 },
     })).setDepth(10000).setVisible(false);
     this.banner = this.add
-      .text(BOARD_ORIGIN.x, 326, '', displayStyle(30, HEX.white, { backgroundColor: HEX.blackFade, padding: { x: 20, y: 12 } }))
+      .text(this.layout.origin.x, 326, '', displayStyle(30, HEX.white, { backgroundColor: HEX.blackFade, padding: { x: 20, y: 12 } }))
       .setOrigin(0.5)
       .setDepth(10001)
       .setVisible(false);
@@ -158,16 +164,17 @@ export class BattleScene extends Phaser.Scene {
 
   private tileFromPointer(p: Phaser.Input.Pointer): Vec | null {
     if (p.x >= PANEL_X) return null;
-    const tile = screenToGrid({ x: p.x, y: p.y }, BOARD_ORIGIN);
+    const tile = screenToGrid({ x: p.x, y: p.y }, this.layout.origin, this.layout.tileW, this.layout.tileH);
     if (!tile || tile.x < 0 || tile.y < 0 || tile.x >= this.state.grid.width || tile.y >= this.state.grid.height) return null;
     return tile;
   }
 
   private unitFromPointer(p: Phaser.Input.Pointer): Unit | null {
+    const { tileW } = this.layout;
     const candidates = this.state.units
       .filter((unit) => unit.alive)
-      .map((unit) => ({ unit, screen: gridToScreen(unit.pos, BOARD_ORIGIN) }))
-      .filter(({ screen }) => Math.abs(p.x - screen.x) <= 18 && p.y >= screen.y - 64 && p.y <= screen.y + 10)
+      .map((unit) => ({ unit, screen: gridToScreen(unit.pos, this.layout.origin, this.layout.tileW, this.layout.tileH) }))
+      .filter(({ screen }) => Math.abs(p.x - screen.x) <= tileW * 0.3 && p.y >= screen.y - tileW * 1.1 && p.y <= screen.y + tileW * 0.17)
       .sort((a, b) => tileDepth(b.unit.pos) - tileDepth(a.unit.pos));
     return candidates[0]?.unit ?? null;
   }
@@ -207,18 +214,22 @@ export class BattleScene extends Phaser.Scene {
       `Survivors: ${squad.length - fallen.length} of ${squad.length}`,
     ].filter((line, index) => line !== '' || index === 1);
     this.banner.setVisible(false);
-    this.add.rectangle(BOARD_ORIGIN.x, 360, 620, 330, COL.panelDark, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
-    this.add.text(BOARD_ORIGIN.x, 300, lines, {
+    this.add.rectangle(this.layout.origin.x, 360, 620, 330, COL.panelDark, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
+    this.add.text(this.layout.origin.x, 300, lines, {
       fontFamily: '"IBM Plex Mono", monospace', fontSize: '17px', color: result === 'won' ? HEX.goldPale : HEX.text, align: 'center', lineSpacing: 8,
     }).setOrigin(0.5).setDepth(10011);
-    goldButton(this, BOARD_ORIGIN.x - 80, 470, 'RETURN TO WORLD', () => this.scene.start('world'))
+    goldButton(this, this.layout.origin.x - 80, 470, 'RETURN TO WORLD', () => this.scene.start('world'))
       .setOrigin(0.5).setDepth(10011);
   }
 
   private hintText(): string {
     const state = this.state;
     if (state.outcome !== 'playing') return '';
-    if (state.turn !== 'squad') return 'Enemy turn.';
+    if (state.turn !== 'squad') {
+      return this.alarm && this.alarm.round === state.round
+        ? 'Enemy turn. Alarm: reinforcements arrive.'
+        : 'Enemy turn.';
+    }
     const sel = selectedUnit(state);
     if (!sel) return 'Select a soldier.';
     if (state.objective) {
@@ -226,7 +237,7 @@ export class BattleScene extends Phaser.Scene {
       if (onTile) return `Objective: hold the gold tile for ${state.objective.holdRounds} of your turns (${state.objectiveHoldRounds}/${state.objective.holdRounds}). Keep someone on it and END TURN.`;
     }
     if (sel.ap === 2) return 'Green tiles: move (1 AP). Hover an enemy for hit chance, click to shoot (1 AP).';
-    return 'Stand next to a crate for cover: enemies hit you 30% less. E ends your turn.';
+    return "Stand next to a crate for cover: it blocks only shots from the shooter's direction. E ends your turn.";
   }
 
   private autoSelect(): void {
@@ -308,7 +319,12 @@ export class BattleScene extends Phaser.Scene {
     if (this.busy || this.state.turn !== 'squad' || this.state.outcome !== 'playing') return;
     this.busy = true;
     this.tooltip.setVisible(false);
+    // Detect a reinforcement arrival from the state transition, not the log.
+    const beforeIds = new Set(livingUnits(this.state, 'alien').map((unit) => unit.id));
     const afterEnd = endTurn(this.state);
+    const spawned = livingUnits(afterEnd, 'alien').find((unit) => !beforeIds.has(unit.id));
+    this.alarm = spawned ? { pos: { ...spawned.pos }, round: afterEnd.round } : null;
+    if (spawned) this.flash(spawned.pos, COL.alien);
     this.setState(afterEnd);
     const { state } = runTeamTurn(afterEnd, 'alien');
     this.time.delayedCall(350, () => {
@@ -319,13 +335,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private flash(at: Vec, color: number): void {
-    const centre = gridToScreen(at, BOARD_ORIGIN);
+    const { tileW, tileH } = this.layout;
+    const centre = gridToScreen(at, this.layout.origin, tileW, tileH);
     const marker = this.add.graphics();
     marker.fillStyle(color, 0.85).fillPoints([
-      new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2),
-      new Phaser.Geom.Point(centre.x + TILE_W / 2, centre.y),
-      new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2),
-      new Phaser.Geom.Point(centre.x - TILE_W / 2, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y - tileH / 2),
+      new Phaser.Geom.Point(centre.x + tileW / 2, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y + tileH / 2),
+      new Phaser.Geom.Point(centre.x - tileW / 2, centre.y),
     ], true).setDepth(10002);
     this.tweens.add({ targets: marker, alpha: 0, duration: 250, onComplete: () => marker.destroy() });
   }
@@ -357,21 +374,26 @@ export class BattleScene extends Phaser.Scene {
   private redraw(): void {
     this.clearBoard();
     const { grid } = this.state;
+    const { tileW, tileH, origin } = this.layout;
 
-    // Decorative water outside the playable grid (Atlantis only).
+    // Decorative water outside the playable grid (Atlantis only), sized to the board.
     if (this.tiles.watery) {
+      const left = origin.x - (grid.height - 1) * (tileW / 2) - tileW / 2;
+      const top = origin.y - tileH / 2;
+      const width = (grid.width + grid.height - 2) * (tileW / 2) + tileW;
+      const height = (grid.width + grid.height - 2) * (tileH / 2) + tileH;
       const water = this.track(this.add.graphics());
-      water.fillStyle(COL.waterDeep, 1).fillRoundedRect(205, 4, 565, 570, 40).setDepth(-10);
-      water.fillStyle(COL.water, 1).fillRoundedRect(225, 20, 525, 540, 36).setDepth(-10);
+      water.fillStyle(COL.waterDeep, 1).fillRoundedRect(left - 6, top - 10, width + 12, height + 20, 24).setDepth(-10);
+      water.fillStyle(COL.water, 1).fillRoundedRect(left, top, width, height, 20).setDepth(-10);
     }
 
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
         const point = { x, y };
-        const centre = gridToScreen(point, BOARD_ORIGIN);
+        const centre = gridToScreen(point, origin, tileW, tileH);
         const dimmed = this.isDimmed(point);
         const floor = this.track(this.add.image(centre.x, centre.y, this.textureFor(this.tiles.floor, 'iso-floor')));
-        floor.setDisplaySize(TILE_W, TILE_H);
+        floor.setDisplaySize(tileW, tileH);
         floor.setTint(dimmed ? COL.dimTint : (x + y) % 2 ? COL.floorAlt : COL.floor);
         floor.setDepth(0);
       }
@@ -386,12 +408,12 @@ export class BattleScene extends Phaser.Scene {
       highlight.fillStyle(COL.reach, 0.52).setDepth(2);
       for (const node of this.reach.values()) {
         if (node.dist === 0) continue;
-        const centre = gridToScreen(node.pos, BOARD_ORIGIN);
+        const centre = gridToScreen(node.pos, origin, tileW, tileH);
         highlight.fillPoints([
-          new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2 + 2),
-          new Phaser.Geom.Point(centre.x + TILE_W / 2 - 3, centre.y),
-          new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2 - 2),
-          new Phaser.Geom.Point(centre.x - TILE_W / 2 + 3, centre.y),
+          new Phaser.Geom.Point(centre.x, centre.y - tileH / 2 + 2),
+          new Phaser.Geom.Point(centre.x + tileW / 2 - 3, centre.y),
+          new Phaser.Geom.Point(centre.x, centre.y + tileH / 2 - 2),
+          new Phaser.Geom.Point(centre.x - tileW / 2 + 3, centre.y),
         ], true);
       }
     }
@@ -405,7 +427,7 @@ export class BattleScene extends Phaser.Scene {
         const point = { x, y };
         const kind = tileAt(grid, point);
         if (kind === 'floor') continue;
-        const centre = gridToScreen(point, BOARD_ORIGIN);
+        const centre = gridToScreen(point, origin, tileW, tileH);
         const dimmed = this.isDimmed(point);
         this.drawObstacle(kind, centre, point, dimmed);
       }
@@ -416,9 +438,10 @@ export class BattleScene extends Phaser.Scene {
 
   private drawObstacle(kind: 'wall' | 'cover', centre: { x: number; y: number }, point: Vec, dimmed: boolean): void {
     const isWall = kind === 'wall';
+    const scale = this.tileScale;
     const texture = this.textureFor(isWall ? this.tiles.wall : this.tiles.cover, isWall ? 'iso-wall' : 'iso-cover');
-    const width = isWall ? TILE_W : this.tiles.coverWidth;
-    const height = isWall ? this.tiles.wallHeight : this.tiles.coverHeight;
+    const width = (isWall ? this.layout.tileW : this.tiles.coverWidth * scale);
+    const height = (isWall ? this.tiles.wallHeight * scale : this.tiles.coverHeight * scale);
     const originY = isWall ? this.tiles.wallOriginY : this.tiles.coverOriginY;
     const obstacle = this.track(this.add.image(centre.x, centre.y, texture));
     obstacle.setDisplaySize(width, height).setOrigin(0.5, originY).setDepth(tileDepth(point, 8));
@@ -434,45 +457,46 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawUnit(unit: Unit): void {
-    const centre = gridToScreen(unit.pos, BOARD_ORIGIN);
+    const { tileW, tileH } = this.layout;
+    const centre = gridToScreen(unit.pos, this.layout.origin, tileW, tileH);
     const container = this.track(this.add.container(centre.x, centre.y));
     container.setDepth(tileDepth(unit.pos, 5));
 
     // Base ring: coloured for the squad, red for enemies.
     const ring = this.add.graphics();
     ring.lineStyle(3, unit.team === 'squad' ? COL.squad : COL.alien, 0.9);
-    ring.strokeEllipse(0, 0, TILE_W - 4, TILE_H + 8);
+    ring.strokeEllipse(0, 0, tileW - 4, tileH + 8);
 
     const shape = this.add.graphics();
-    shape.fillStyle(COL.black, 0.45).fillEllipse(0, 5, 26, 10);
+    shape.fillStyle(COL.black, 0.45).fillEllipse(0, 5, tileW * 0.43, tileW * 0.17);
     if (unit.id === this.state.selectedId) {
       shape.lineStyle(2, COL.white, 1).strokePoints([
-        new Phaser.Geom.Point(0, -TILE_H / 2 + 1),
-        new Phaser.Geom.Point(TILE_W / 2 - 4, 0),
-        new Phaser.Geom.Point(0, TILE_H / 2 - 1),
-        new Phaser.Geom.Point(-TILE_W / 2 + 4, 0),
+        new Phaser.Geom.Point(0, -tileH / 2 + 1),
+        new Phaser.Geom.Point(tileW / 2 - 4, 0),
+        new Phaser.Geom.Point(0, tileH / 2 - 1),
+        new Phaser.Geom.Point(-tileW / 2 + 4, 0),
       ], true);
     }
 
     const sprite = this.spriteFor(unit);
     const spriteImage = this.textures.exists(sprite.key) ? this.add.image(0, 0, sprite.key) : null;
     if (spriteImage) {
-      const height = TILE_W * 1.6; // ~96px, about 1.6 tiles tall
+      const height = tileW * 1.6; // about 1.6 tiles tall
       spriteImage.setDisplaySize(height, height); // square source, uniform scale
       spriteImage.setOrigin(0.5, sprite.feet);
     } else {
       // Fallback glyph: rounded body or triangle.
       shape.fillStyle(unit.team === 'squad' ? COL.squad : COL.alien, 1);
-      if (unit.team === 'squad') shape.fillRoundedRect(-12, -39, 24, 37, 5);
-      else shape.fillTriangle(0, -43, -15, -3, 15, -3);
+      if (unit.team === 'squad') shape.fillRoundedRect(-tileW * 0.2, -tileW * 0.65, tileW * 0.4, tileW * 0.62, 5);
+      else shape.fillTriangle(0, -tileW * 0.72, -tileW * 0.25, -tileW * 0.05, tileW * 0.25, -tileW * 0.05);
     }
 
-    const hpWidth = 28;
-    shape.fillStyle(COL.hpBg, 1).fillRect(-hpWidth / 2, -48, hpWidth, 4);
-    shape.fillStyle(COL.hp, 1).fillRect(-hpWidth / 2, -48, (hpWidth * unit.hp) / unit.maxHp, 4);
+    const hpWidth = tileW * 0.47;
+    shape.fillStyle(COL.hpBg, 1).fillRect(-hpWidth / 2, -tileW * 0.8, hpWidth, 4);
+    shape.fillStyle(COL.hp, 1).fillRect(-hpWidth / 2, -tileW * 0.8, (hpWidth * unit.hp) / unit.maxHp, 4);
     if (unit.team === 'squad') {
       for (let i = 0; i < unit.maxAp; i++) {
-        shape.fillStyle(i < unit.ap ? COL.ap : COL.apEmpty, 1).fillCircle(-5 + i * 10, -43, 2.5);
+        shape.fillStyle(i < unit.ap ? COL.ap : COL.apEmpty, 1).fillCircle(-hpWidth / 2 + 4 + i * (hpWidth - 8) / Math.max(1, unit.maxAp - 1), -tileW * 0.72, 2.5);
       }
     }
 
@@ -481,13 +505,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawObjectiveBeacon(tile: Vec): void {
-    const centre = gridToScreen(tile, BOARD_ORIGIN);
+    const { tileW, tileH } = this.layout;
+    const centre = gridToScreen(tile, this.layout.origin, tileW, tileH);
     const beacon = this.track(this.add.graphics());
     beacon.fillStyle(COL.gold, 0.9).fillPoints([
-      new Phaser.Geom.Point(centre.x, centre.y - TILE_H / 2 - 4),
-      new Phaser.Geom.Point(centre.x + TILE_W / 2 - 4, centre.y),
-      new Phaser.Geom.Point(centre.x, centre.y + TILE_H / 2 - 4),
-      new Phaser.Geom.Point(centre.x - TILE_W / 2 + 4, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y - tileH / 2 - 4),
+      new Phaser.Geom.Point(centre.x + tileW / 2 - 4, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y + tileH / 2 - 4),
+      new Phaser.Geom.Point(centre.x - tileW / 2 + 4, centre.y),
     ], true);
     beacon.setDepth(3);
     this.tweens.add({ targets: beacon, alpha: { from: 0.35, to: 1 }, duration: 700, yoyo: true, repeat: -1 });
@@ -555,16 +580,16 @@ export class BattleScene extends Phaser.Scene {
       const status = this.add.text(PANEL_X + 220, y + 8, unit.alive ? '' : 'KIA', textStyle(11, HEX.danger)).setOrigin(1, 0).setDepth(9011);
       cards.push(status);
 
-      // HP bar
-      const hpBg = this.add.rectangle(PANEL_X + 56, y + 32, 160, 8, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
-      const hp = this.add.rectangle(PANEL_X + 56, y + 32, (160 * unit.hp) / unit.maxHp, 8, COL.hp, 1).setOrigin(0, 0.5).setDepth(9012);
-      const hpLabel = this.add.text(PANEL_X + 222, y + 32, String(unit.hp), textStyle(11, HEX.text)).setOrigin(1, 0.5).setDepth(9012);
+      // HP bar: the value sits right of the bar, never over it.
+      const hpBg = this.add.rectangle(PANEL_X + 56, y + 32, 150, 8, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
+      const hp = this.add.rectangle(PANEL_X + 56, y + 32, (150 * unit.hp) / unit.maxHp, 8, COL.hp, 1).setOrigin(0, 0.5).setDepth(9012);
+      const hpLabel = this.add.text(PANEL_X + 214, y + 32, String(unit.hp), textStyle(11, HEX.text)).setOrigin(0, 0.5).setDepth(9012);
       cards.push(hpBg, hp, hpLabel);
 
       // AP bar
-      const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 160, 6, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
-      const ap = this.add.rectangle(PANEL_X + 56, y + 48, (160 * unit.ap) / unit.maxAp, 6, COL.goldBright, 1).setOrigin(0, 0.5).setDepth(9012);
-      const apLabel = this.add.text(PANEL_X + 222, y + 48, `${unit.ap} AP`, textStyle(11, HEX.goldPale)).setOrigin(1, 0.5).setDepth(9012);
+      const apBg = this.add.rectangle(PANEL_X + 56, y + 48, 150, 6, COL.hpBg, 1).setOrigin(0, 0.5).setDepth(9011);
+      const ap = this.add.rectangle(PANEL_X + 56, y + 48, (150 * unit.ap) / unit.maxAp, 6, COL.goldBright, 1).setOrigin(0, 0.5).setDepth(9012);
+      const apLabel = this.add.text(PANEL_X + 214, y + 48, `${unit.ap} AP`, textStyle(11, HEX.goldPale)).setOrigin(0, 0.5).setDepth(9012);
       cards.push(apBg, ap, apLabel);
     });
     this.boardObjects.push(...cards);

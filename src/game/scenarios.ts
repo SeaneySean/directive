@@ -11,8 +11,20 @@ function soldier(id: string, name: string, x: number, y: number, weapon: Weapon)
   return { id, name, team: 'squad', pos: { x, y }, hp: 12, maxHp: 12, ap: 2, maxAp: 2, move: 4, weapon, alive: true };
 }
 
-function alien(id: string, name: string, x: number, y: number, weapon: Weapon, hp = 8): Unit {
-  return { id, name, team: 'alien', pos: { x, y }, hp, maxHp: hp, ap: 2, maxAp: 2, move: 4, weapon, alive: true };
+function alien(
+  id: string,
+  name: string,
+  x: number,
+  y: number,
+  weapon: Weapon,
+  hp = 8,
+  stance?: 'hold' | 'advance',
+): Unit {
+  return { id, name, team: 'alien', pos: { x, y }, hp, maxHp: hp, ap: 2, maxAp: 2, move: 4, weapon, alive: true, stance };
+}
+
+function reinforcement(name: string, weapon: Weapon, hp: number): Omit<Unit, 'id' | 'pos'> {
+  return { name, team: 'alien', hp, maxHp: hp, ap: 2, maxAp: 2, move: 4, weapon, alive: true, stance: 'advance' };
 }
 
 /** 16x16. '.' floor, '#' wall, 'c' cover. Squad lands bottom-left. */
@@ -51,74 +63,106 @@ export const FARMSTEAD: Scenario = {
   ],
 };
 
-const MISSION_SQUAD: Unit[] = [
-  soldier('s1', 'Cole', 2, 13, RIFLE),
-  soldier('s2', 'Diaz', 5, 13, RIFLE),
-  soldier('s3', 'Okafor', 8, 13, SHOTGUN),
-  soldier('s4', 'Reyes', 11, 13, RIFLE),
+const HANGAR_SQUAD: Unit[] = [
+  soldier('s1', 'Cole', 4, 18, RIFLE),
+  soldier('s2', 'Diaz', 7, 18, RIFLE),
+  soldier('s3', 'Okafor', 10, 18, SHOTGUN),
+  soldier('s4', 'Reyes', 13, 18, RIFLE),
+];
+
+const ATLANTIS_SQUAD: Unit[] = [
+  soldier('s1', 'Cole', 4, 20, RIFLE),
+  soldier('s2', 'Diaz', 7, 20, RIFLE),
+  soldier('s3', 'Okafor', 10, 20, SHOTGUN),
+  soldier('s4', 'Reyes', 13, 20, RIFLE),
 ];
 
 export const AREA51_HANGAR: Scenario = {
   name: 'Area 51 Hangar',
-  // Open hangar floor. Crate clusters give cover to stand beside; the objective
-  // sits under the craft at the far end, flanked by crates, four moves away.
+  // 20x20 open hangar floor. Crate clusters give cover to stand beside; the
+  // objective sits under the craft on the far third, ringed by holding guards.
   rows: [
-    '################',
-    '#..............#',
-    '#..cc......cc..#',
-    '#......c.......#',
-    '#....c....c....#',
-    '#..............#',
-    '#..cc......cc..#',
-    '#.......c......#',
-    '#..cc......cc..#',
-    '#..............#',
-    '#.....c..c.....#',
-    '#..............#',
-    '#.c..c..c..c...#',
-    '#..............#',
-    '#..............#',
-    '################',
+    '####################',
+    '#..................#',
+    '#....cc......cc....#',
+    '#.......cc.........#',
+    '#..c....c....c.....#',
+    '#..................#',
+    '#....cc......cc....#',
+    '#........c.........#',
+    '#..cc......cc......#',
+    '#..................#',
+    '#......c....c......#',
+    '#..................#',
+    '#..c..c....c..c....#',
+    '#..................#',
+    '#..................#',
+    '#....c....c....c...#',
+    '#..................#',
+    '#...c..c..c..c.....#',
+    '#..................#',
+    '####################',
   ],
   units: [
-    ...MISSION_SQUAD,
-    alien('g1', 'Guard', 4, 3, GUARD_RIFLE, 14),
-    alien('g2', 'Guard', 11, 3, GUARD_RIFLE, 14),
-    alien('g3', 'Guard', 8, 6, GUARD_RIFLE, 14),
-    alien('g4', 'Guard', 6, 9, GUARD_RIFLE, 14),
+    ...HANGAR_SQUAD,
+    alien('g1', 'Guard', 7, 3, GUARD_RIFLE, 14, 'hold'),
+    alien('g2', 'Guard', 11, 3, GUARD_RIFLE, 14, 'hold'),
+    alien('g3', 'Guard', 8, 5, GUARD_RIFLE, 14, 'hold'),
+    alien('g4', 'Guard', 10, 5, GUARD_RIFLE, 14, 'hold'),
   ],
-  objective: { tile: { x: 8, y: 3 }, holdRounds: 2 },
+  objective: { tile: { x: 9, y: 4 }, holdRounds: 2 },
+  reinforcements: {
+    fromRound: 4,
+    every: 2,
+    max: 4,
+    spawns: [{ x: 3, y: 1 }, { x: 6, y: 1 }, { x: 9, y: 1 }, { x: 12, y: 1 }, { x: 15, y: 1 }],
+    unit: reinforcement('Guard', GUARD_RIFLE, 14),
+  },
 };
 
 export const ATLANTIS_RUINS: Scenario = {
   name: 'Atlantis Ruins',
-  // Broken colonnade. Pillars scattered for cover; the formula altar at the far end.
+  // 22x22 flooded colonnade. Pillars scattered for cover; the formula altar
+  // sits on the far third, ringed by holding guardians.
   rows: [
-    '################',
-    '#..............#',
-    '#.c...c..c...c.#',
-    '#..............#',
-    '#....c....c....#',
-    '#..............#',
-    '#.c..........c.#',
-    '#......c.c.....#',
-    '#..c........c..#',
-    '#..............#',
-    '#.....c..c.....#',
-    '#..............#',
-    '#.c..c..c..c...#',
-    '#..............#',
-    '#..............#',
-    '################',
+    '######################',
+    '#....................#',
+    '#..c...c..c...c......#',
+    '#....................#',
+    '#.....c....c.........#',
+    '#....................#',
+    '#..c............c....#',
+    '#........c.c.........#',
+    '#...c............c...#',
+    '#....................#',
+    '#.......c..c.........#',
+    '#....................#',
+    '#..c..c....c..c......#',
+    '#....................#',
+    '#....................#',
+    '#.....c......c.......#',
+    '#....................#',
+    '#...c..........c.....#',
+    '#....................#',
+    '#...c..c..c..c.......#',
+    '#....................#',
+    '######################',
   ],
   units: [
-    ...MISSION_SQUAD,
-    alien('u1', 'Guardian Alpha', 3, 3, GUARDIAN_WEAPON, 16),
-    alien('u2', 'Guardian Beta', 12, 3, GUARDIAN_WEAPON, 16),
-    alien('u3', 'Guardian Gamma', 6, 6, GUARDIAN_WEAPON, 16),
-    alien('u4', 'Guardian Delta', 10, 6, GUARDIAN_WEAPON, 16),
+    ...ATLANTIS_SQUAD,
+    alien('u1', 'Guardian Alpha', 8, 3, GUARDIAN_WEAPON, 16, 'hold'),
+    alien('u2', 'Guardian Beta', 12, 3, GUARDIAN_WEAPON, 16, 'hold'),
+    alien('u3', 'Guardian Gamma', 9, 2, GUARDIAN_WEAPON, 16, 'hold'),
+    alien('u4', 'Guardian Delta', 10, 5, GUARDIAN_WEAPON, 16, 'hold'),
   ],
-  objective: { tile: { x: 8, y: 3 }, holdRounds: 2 },
+  objective: { tile: { x: 10, y: 4 }, holdRounds: 2 },
+  reinforcements: {
+    fromRound: 5,
+    every: 2,
+    max: 3,
+    spawns: [{ x: 4, y: 1 }, { x: 8, y: 1 }, { x: 12, y: 1 }, { x: 16, y: 1 }],
+    unit: reinforcement('Guardian', GUARDIAN_WEAPON, 16),
+  },
 };
 
 export const SCENARIOS: Scenario[] = [FARMSTEAD, AREA51_HANGAR, ATLANTIS_RUINS];
