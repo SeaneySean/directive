@@ -14,8 +14,9 @@ The strategic layer stays as built. The remaining week goes into making the comb
 main loop, the way Syndicate and UFO: Enemy Unknown work: the world map exists to feed
 missions, and the squad that fights them is the thing you care about.
 
-1. **Missions everywhere (7a).** Every region offers one mission per campaign turn, drawn
-   from three types on generated maps: **Recover technology** (reach the item tile, then get
+1. **Missions everywhere (7a).** Missions arise from your strategy: acting in a region can
+   spawn a mission there (at most two open at once, expiring after three turns), drawn from
+   three types on generated maps: **Recover technology** (reach the item tile, then get
    the carrier back to your extraction edge), **Assassination** (kill a marked target with
    bodyguards before they reach their exit), **Rival cabal** (eliminate a four-operative squad
    that uses the smart squad AI). Winning gives that region a large influence jump on the
@@ -174,6 +175,7 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 6c-tactics | Directional cover, holding guards, timed reinforcements, 20x20/22x22 maps, camper gate, 6b nits | worker → critic | merged 23 Sep; human difficulty gate open |
 | 7a-rules | Objective types (hold/recover/assassinate/clash), smart and flee stances, map generator, missions harness | worker → critic | merged 23 Sep |
 | 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | merged 23 Sep |
-| 7b | Persistent squad, roster, promotions, replacements | worker → critic | next |
+| 7b | Persistent squad, roster, promotions, replacements | worker → critic | building |
+| 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | after 7b |
 | 7c | Overwatch and grenades | worker → critic | |
 | 7d | Polish, Loom, Skool post | conductor | last |

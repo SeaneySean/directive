@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 23 Sep 2026, 17:20. Deadline: 30 Sep 2026.
+Last updated: 23 Sep 2026, 18:30. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -13,7 +13,8 @@ Last updated: 23 Sep 2026, 17:20. Deadline: 30 Sep 2026.
 | 6c-tactics | Directional cover, holding guards, reinforcements, bigger maps | merged; hangar eased again after "too far the other way", objective now a light column |
 | 7a-rules | The three mission types and the map generator as rules (not yet visible in the game) | merged |
 | 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | merged; PLAY THIS |
-| 7b | Persistent squad: HP and kills carry over, promotions, deaths cost | after 7a |
+| 7b | Persistent squad: HP and kills carry over, promotions, deaths cost | Orpheus building now |
+| 7a-spawn | Your 23 Sep note: missions spawn from your actions, one or two open at a time, panel out of the map | brief written, runs right after 7b |
 | 7c | Overwatch and grenades | after 7b |
 | 7d | Polish, Loom, Skool post | last |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
