@@ -78,6 +78,9 @@ export interface GameState {
 
 export type ObjectiveKind = 'hold' | 'recover' | 'assassinate' | 'clash';
 
+/** The three generated-mission kinds, shared by the map generator and campaign. */
+export type MissionType = 'recover' | 'assassinate' | 'clash';
+
 /**
  * A mission objective, discriminated by `kind`.
  * - `hold`: stand on `tile` for `holdRounds` consecutive squad turns (story missions).

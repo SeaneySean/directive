@@ -21,7 +21,7 @@ import {
   type Unit,
   type Vec,
 } from '../game/index.ts';
-import { completeMission, missionScenario, type MissionId } from '../game/strategy/missions.ts';
+import { completeMission, completeOffer, missionScenario, offerById, offerScenario, OFFER_INFLUENCE_GAIN, type MissionId } from '../game/strategy/missions.ts';
 import type { CampaignState } from '../game/strategy/types.ts';
 import { MISSION_TEXT } from '../game/strategy/text.ts';
 import { CAMPAIGN_REGISTRY_KEY, writeCampaignSave } from './sceneGlue.ts';
@@ -69,6 +69,7 @@ export class BattleScene extends Phaser.Scene {
   private state!: GameState;
   private scenario: Scenario = FARMSTEAD;
   private missionId: MissionId | null = null;
+  private offerId: string | null = null;
   private boardObjects: Phaser.GameObjects.GameObject[] = [];
   private panel!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
@@ -90,8 +91,9 @@ export class BattleScene extends Phaser.Scene {
     super('battle');
   }
 
-  init(data: { missionId?: MissionId }): void {
+  init(data: { missionId?: MissionId; offerId?: string }): void {
     this.missionId = data.missionId ?? null;
+    this.offerId = data.offerId ?? null;
     this.returning = false;
   }
 
@@ -115,8 +117,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
-    if (this.missionId) {
-      const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
+    const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
+    if (this.offerId) {
+      this.scenario = offerScenario(campaign, this.offerId);
+    } else if (this.missionId) {
       this.scenario = missionScenario(campaign, this.missionId);
     } else {
       this.scenario = FARMSTEAD;
@@ -155,7 +159,7 @@ export class BattleScene extends Phaser.Scene {
       this.cycleSelection();
     });
     this.input.keyboard?.on('keydown-R', () => {
-      if (!this.missionId && this.state.outcome !== 'playing') this.scene.restart();
+      if (!this.missionId && !this.offerId && this.state.outcome !== 'playing') this.scene.restart();
     });
 
     this.autoSelect();
@@ -188,31 +192,50 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private finishMission(result: 'won' | 'lost'): void {
-    if (!this.missionId || this.returning) return;
+    if ((!this.missionId && !this.offerId) || this.returning) return;
     this.returning = true;
     const campaign = this.registry.get(CAMPAIGN_REGISTRY_KEY) as CampaignState;
-    const next = completeMission(campaign, this.missionId, result);
+    const next = this.offerId
+      ? completeOffer(campaign, this.offerId, result)
+      : completeMission(campaign, this.missionId!, result);
     this.registry.set(CAMPAIGN_REGISTRY_KEY, next);
     writeCampaignSave(next);
     this.time.delayedCall(900, () => this.showDebrief(result, campaign, next));
   }
 
   private showDebrief(result: 'won' | 'lost', before: CampaignState, after: CampaignState): void {
-    const copy = this.missionId ? MISSION_TEXT[this.missionId] : undefined;
     const squad = this.state.units.filter((unit) => unit.team === 'squad');
     const fallen = squad.filter((unit) => !unit.alive).map((unit) => unit.name);
-    const gained = after.items.filter((item) => !before.items.includes(item));
     const exposureDelta = after.exposure - before.exposure;
-    const lines = [
+    const lines: string[] = [
       result === 'won' ? 'MISSION COMPLETE' : 'MISSION FAILED',
       '',
-      result === 'won'
-        ? `Gained: ${gained.length ? gained.join(', ') : 'nothing new'}${exposureDelta ? `, Exposure ${exposureDelta > 0 ? '+' : ''}${exposureDelta}` : ''}`
-        : `Lost 20 treasury (now ${after.treasury}). You can retry next turn.`,
-      copy && result === 'won' ? `Reward: ${copy.reward}` : '',
-      `Casualties: ${fallen.length ? fallen.join(', ') : 'none'}`,
-      `Survivors: ${squad.length - fallen.length} of ${squad.length}`,
-    ].filter((line, index) => line !== '' || index === 1);
+    ];
+
+    if (this.offerId) {
+      const offer = offerById(before, this.offerId);
+      const region = before.regions.find((candidate) => candidate.id === offer?.regionId);
+      if (result === 'won') {
+        lines.push(`+${OFFER_INFLUENCE_GAIN} ${(offer?.path ?? '').toUpperCase()} in ${(region?.name ?? '').toUpperCase()}`);
+        lines.push(`Resistance -5 · Exposure +${exposureDelta}`);
+      } else {
+        lines.push(`-20 treasury (now ${after.treasury}) · Exposure +${exposureDelta}`);
+        lines.push('That offer is spent; a fresh mission appears next turn.');
+      }
+      lines.push(`Casualties: ${fallen.length ? fallen.join(', ') : 'none'}`);
+      lines.push(`Survivors: ${squad.length - fallen.length} of ${squad.length}`);
+    } else {
+      const copy = this.missionId ? MISSION_TEXT[this.missionId] : undefined;
+      const gained = after.items.filter((item) => !before.items.includes(item));
+      if (result === 'won') {
+        lines.push(`Gained: ${gained.length ? gained.join(', ') : 'nothing new'}${exposureDelta ? `, Exposure ${exposureDelta > 0 ? '+' : ''}${exposureDelta}` : ''}`);
+      } else {
+        lines.push(`Lost 20 treasury (now ${after.treasury}). You can retry next turn.`);
+      }
+      if (copy && result === 'won') lines.push(`Reward: ${copy.reward}`);
+      lines.push(`Casualties: ${fallen.length ? fallen.join(', ') : 'none'}`);
+      lines.push(`Survivors: ${squad.length - fallen.length} of ${squad.length}`);
+    }
     this.banner.setVisible(false);
     this.add.rectangle(this.layout.origin.x, 360, 620, 330, COL.panelDark, 0.97).setStrokeStyle(2, COL.gold).setDepth(10010);
     this.add.text(this.layout.origin.x, 300, lines, {
@@ -232,13 +255,30 @@ export class BattleScene extends Phaser.Scene {
     }
     const sel = selectedUnit(state);
     if (!sel) return 'Select a soldier.';
-    if (state.objective?.kind === 'hold') {
-      const tile = state.objective.tile;
-      const onTile = livingUnits(state, 'squad').some((unit) => unit.pos.x === tile.x && unit.pos.y === tile.y);
-      if (onTile) return `Objective: hold the gold tile for ${state.objective.holdRounds} of your turns (${state.objectiveHoldRounds}/${state.objective.holdRounds}). Keep someone on it and END TURN.`;
-    }
+
+    const objectiveHint = this.objectiveHint();
+    if (objectiveHint) return objectiveHint;
+
     if (sel.ap === 2) return 'Green tiles: move (1 AP). Hover an enemy for hit chance, click to shoot (1 AP).';
     return "Stand next to a crate for cover: it blocks only shots from the shooter's direction. E ends your turn.";
+  }
+
+  /** One-sentence objective hint per objective kind. */
+  private objectiveHint(): string | null {
+    const objective = this.state.objective;
+    if (!objective) return null;
+    switch (objective.kind) {
+      case 'hold':
+        return `Objective: hold the gold tile for ${objective.holdRounds} of your turns (${this.state.objectiveHoldRounds}/${objective.holdRounds}). Keep someone on it and END TURN.`;
+      case 'recover':
+        return this.state.carrierId
+          ? 'Carrier: reach a green extraction tile on the south edge.'
+          : 'End a soldier turn on the gold crate to pick it up, then reach a green extraction tile.';
+      case 'assassinate':
+        return 'Kill the gold-ringed target before it escapes through a red exit.';
+      case 'clash':
+        return 'Eliminate every rival operative.';
+    }
   }
 
   private autoSelect(): void {
@@ -400,9 +440,7 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    if (this.state.objective?.kind === 'hold') {
-      this.drawObjectiveBeacon(this.state.objective.tile);
-    }
+    this.drawObjectiveMarkers();
 
     if (this.reach) {
       const highlight = this.track(this.add.graphics());
@@ -503,6 +541,30 @@ export class BattleScene extends Phaser.Scene {
 
     container.add([ring, shape]);
     if (spriteImage) container.add(spriteImage);
+
+    // Assassination target: a gold ring and a floating label.
+    if (this.state.objective?.kind === 'assassinate' && this.state.objective.targetId === unit.id) {
+      const goldRing = this.add.graphics();
+      goldRing.lineStyle(3, COL.gold, 0.95);
+      goldRing.strokeEllipse(0, 0, tileW + 2, tileH + 14);
+      const label = this.add.text(0, -tileW * 1.6 - 4, 'TARGET', textStyle(10, HEX.goldPale, {
+        backgroundColor: HEX.hintBg,
+        padding: { x: 4, y: 2 },
+      })).setOrigin(0.5, 1);
+      container.add([goldRing, label]);
+    }
+
+    // Recover carrier: a small gold crate above the head.
+    if (this.state.carrierId === unit.id) {
+      const crate = this.add.graphics();
+      const w = tileW * 0.26;
+      const h = tileW * 0.2;
+      crate.fillStyle(COL.gold, 1);
+      crate.fillRect(-w / 2, -tileW * 1.6 - h - 6, w, h);
+      crate.lineStyle(1, COL.black, 0.85);
+      crate.strokeRect(-w / 2 + 3, -tileW * 1.6 - h - 3, w - 6, h - 6);
+      container.add(crate);
+    }
   }
 
   private drawObjectiveBeacon(tile: Vec): void {
@@ -529,12 +591,61 @@ export class BattleScene extends Phaser.Scene {
     label.setDepth(tileDepth(tile, 6) + 0.6);
   }
 
+  private drawGlowTile(tile: Vec, color: number, alpha = 0.5): void {
+    const { tileW, tileH } = this.layout;
+    const centre = gridToScreen(tile, this.layout.origin, tileW, tileH);
+    const glow = this.track(this.add.graphics());
+    glow.fillStyle(color, alpha);
+    glow.fillPoints([
+      new Phaser.Geom.Point(centre.x, centre.y - tileH / 2 + 2),
+      new Phaser.Geom.Point(centre.x + tileW / 2 - 3, centre.y),
+      new Phaser.Geom.Point(centre.x, centre.y + tileH / 2 - 2),
+      new Phaser.Geom.Point(centre.x - tileW / 2 + 3, centre.y),
+    ], true);
+    glow.setDepth(2);
+  }
+
+  /** Objective overlays beyond the hold beacon: extraction, exits, item tile. */
+  private drawObjectiveMarkers(): void {
+    const objective = this.state.objective;
+    if (!objective) return;
+
+    if (objective.kind === 'hold') {
+      this.drawObjectiveBeacon(objective.tile);
+      return;
+    }
+
+    if (objective.kind === 'recover') {
+      // The extraction edge glows green; the item tile shows the gold beacon
+      // only while the item is still on the ground.
+      for (const tile of objective.extraction) this.drawGlowTile(tile, COL.reach, 0.55);
+      if (!this.state.carrierId) this.drawObjectiveBeacon(objective.tile);
+      return;
+    }
+
+    if (objective.kind === 'assassinate') {
+      // Exits glow red so the escape route stays visible.
+      for (const tile of objective.exits) this.drawGlowTile(tile, COL.alien, 0.55);
+      return;
+    }
+
+    // clash: no tile markers.
+  }
+
   private drawPanel(): void {
     const state = this.state;
     const sel = selectedUnit(state);
     const lines = [`ILLUMINATUS  //  ${this.scenario.name.toUpperCase()}`, `Round ${state.round}   ${state.turn === 'squad' ? 'YOUR TURN' : 'ENEMY TURN'}`, ''];
-    if (state.objective?.kind === 'hold') {
-      lines.push('Reach the gold tile and hold it', `Hold: ${state.objectiveHoldRounds}/${state.objective.holdRounds} turns  or kill all enemies`, '');
+    const objective = state.objective;
+    if (objective?.kind === 'hold') {
+      lines.push('Reach the gold tile and hold it', `Hold: ${state.objectiveHoldRounds}/${objective.holdRounds} turns  or kill all enemies`, '');
+    } else if (objective?.kind === 'recover') {
+      lines.push(state.carrierId ? 'Carry the item to a green edge tile' : 'Recover the item, then extract', '', '');
+    } else if (objective?.kind === 'assassinate') {
+      const target = state.units.find((unit) => unit.id === objective.targetId);
+      lines.push(target && target.alive ? 'Kill the marked target' : 'Target eliminated', target && target.alive ? 'before it reaches a red exit' : '', '');
+    } else if (objective?.kind === 'clash') {
+      lines.push('Eliminate the rival squad', '');
     }
     if (sel) {
       lines.push(
@@ -552,7 +663,7 @@ export class BattleScene extends Phaser.Scene {
     this.drawPortraitCards();
 
     if (state.outcome !== 'playing') {
-      const suffix = this.missionId ? '' : '\n\nR to restart';
+      const suffix = this.missionId || this.offerId ? '' : '\n\nR to restart';
       this.banner.setText(`${state.outcome === 'won' ? 'AREA SECURED' : 'SQUAD LOST'}${suffix}`).setVisible(true);
       this.endTurnBtn.setVisible(false);
     } else {

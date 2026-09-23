@@ -1,8 +1,8 @@
 import { nextRandom } from './rng.ts';
 import type { InfluencePath } from './strategy/types.ts';
-import type { Reinforcements, Scenario, ScenarioObjective, Unit, Vec, Weapon } from './types.ts';
+import type { MissionType, Reinforcements, Scenario, ScenarioObjective, Unit, Vec, Weapon } from './types.ts';
 
-export type MissionType = 'recover' | 'assassinate' | 'clash';
+export type { MissionType };
 
 const RIFLE: Weapon = { name: 'Rifle', range: 8, accuracy: 75, damage: 4 };
 const SHOTGUN: Weapon = { name: 'Shotgun', range: 4, accuracy: 90, damage: 6 };
