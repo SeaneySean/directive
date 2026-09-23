@@ -19,7 +19,8 @@ Two layers, two missions, one campaign that can be won or lost in 20 to 30 minut
 5. **Win** by holding 5 regions or reaching AGI. **Lose** when Exposure hits 100.
 
 Everything else in the premise (more regions, dictators as units, 3D, a full Syndicate-style
-real-time layer) is the sequel.
+real-time layer) is the sequel. Narrow exceptions granted 23 Sep: hold-position enemy AI and
+finite timed reinforcements on the two missions (see tasks/slice-6c-tactics.md).
 
 ## Strategic layer
 
@@ -158,4 +159,5 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 |---|---|---|---|
 | 6a | Balance against a human + explanation layer (title, help, hints, briefings, hover text, save/load) | worker → critic | merged 20 Sep; human difficulty gate still pending Sean's playtest |
 | 6b | The war-room look (map, HUD theme, CRT research, miniatures, portraits, event art) | worker → critic | merged 20 Sep |
-| 6c | Polish (briefing text scrim, portrait HP digits, balance from playtests), mobile sizing, Loom, Skool post | conductor | next |
+| 6c-tactics | Directional cover, holding guards, timed reinforcements, 20x20/22x22 maps, camper gate, 6b nits | worker → critic | merged 23 Sep; human difficulty gate open |
+| 6c-ship | Mobile sizing, Loom, Skool post | conductor | next |

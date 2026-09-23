@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 23 Sep 2026, 11:30. Deadline: 30 Sep 2026.
+Last updated: 23 Sep 2026, 13:15. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -10,12 +10,15 @@ Last updated: 23 Sep 2026, 11:30. Deadline: 30 Sep 2026.
 | 6a | Balance against a human + explanation layer (title screen with your splash, How To Play, first-turn guide, hover text, event context, mission briefing and debrief, battle hints, save/load) | merged on master |
 | 6a+ | Mission maps redrawn by hand after "still unplayable": open floors, scattered cover, three-hit guards | on master, needs your playtest |
 | 6b | The war-room look (night-earth map, gold HUD, CRT research, Kenney miniatures, your sprites, portraits, event art) | merged on master |
-| 6c-tactics | From your 23 Sep playtest: directional cover (crate must be between shooter and target), guards hold position instead of walking into your rifles, timed reinforcements so camping loses, 20x20 and 22x22 maps, briefing text band, HP digit fix | Orpheus building now |
+| 6c-tactics | Directional cover, guards that hold position, timed reinforcements (alarm from round 4 in the hangar), 20x20 and 22x22 maps, readable briefing, HP digits | merged on master; needs your playtest |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
 
 ## What I need from Sean
 
-1. Nothing to play right now; the next build to test is 6c-tactics when it lands.
+1. **Play both missions** on the new build and report each in one line (won or lost, soldiers lost, turns):
+   `cd ~/games/illuminatus-play && bun run dev` (the copy is already on the new build).
+   Watch for: guards now stay by their cover; from round 4 the alarm brings extra guards at
+   the far wall; camping no longer wins. Atlantis unlocks from the Mythology research route.
 2. Still outstanding from earlier: `gh auth refresh -h github.com -s workflow` so the Pages
    deploy can go live; the judges need a link.
 
