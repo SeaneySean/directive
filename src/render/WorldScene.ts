@@ -323,10 +323,11 @@ export class WorldScene extends Phaser.Scene {
       '',
       `ENEMIES: ${alienCount}`,
       reinf ? `REINFORCEMENTS: up to ${reinf.max} more, first on round ${reinf.fromRound}, then every ${reinf.every} rounds` : '',
+      reinf && copy.reinforcementsNote ? copy.reinforcementsNote : '',
       reinf ? 'Clearing every enemy on the field still wins immediately, even if more are due.' : '',
       `REWARD: ${copy.reward}`,
     ];
-    add(this.add.text(210, 244, lines, textStyle(16, HEX.textDim, { lineSpacing: 8 })));
+    add(this.add.text(210, 244, lines, textStyle(16, HEX.textDim, { lineSpacing: 8, wordWrap: { width: 800 } })));
     add(goldButton(this, 350, 600, 'BACK', () => objects.forEach((object) => object.destroy()), {
       size: 17,
       padding: { x: 12, y: 7 },
