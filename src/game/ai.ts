@@ -8,6 +8,9 @@ import type { GameState, Team, Unit, Vec } from './types.ts';
 /** Minimum hit chance the AI will accept before it prefers to reposition. */
 const MIN_SHOT_CHANCE = 25;
 
+/** A holding guard only repositions within this many walkable path steps. */
+const HOLD_REPOSITION_STEPS = 2;
+
 export interface AiStep {
   kind: 'move' | 'shoot' | 'wait';
   unitId: string;
@@ -27,6 +30,61 @@ function bestTarget(state: GameState, unit: Unit, enemies: Unit[]): { target: Un
     if (!best || score > best.chance) best = { target: e, chance: score };
   }
   return best;
+}
+
+/** Legal-shot chance from an arbitrary tile, or null. */
+function shotChanceFrom(state: GameState, unit: Unit, from: Vec, enemy: Unit): number | null {
+  return previewShot(state.grid, { ...unit, pos: from }, enemy)?.chance ?? null;
+}
+
+/**
+ * Pick a destination for a holding guard: within HOLD_REPOSITION_STEPS walkable
+ * steps, with a legal shot against some enemy and directional cover from that
+ * same enemy. Deterministic ordering: highest shot chance, then shortest path,
+ * then y, then x.
+ */
+function holdDestination(state: GameState, unit: Unit, enemies: Unit[]): Vec | null {
+  const reach = reachable(state.grid, state.units, unit.pos, HOLD_REPOSITION_STEPS);
+  let best: { pos: Vec; chance: number; dist: number } | null = null;
+  for (const node of reach.values()) {
+    if (node.dist === 0) continue;
+    for (const e of enemies) {
+      const chance = shotChanceFrom(state, unit, node.pos, e);
+      if (chance === null) continue;
+      if (!inCover(state.grid, node.pos, e.pos)) continue;
+      const candidate = { pos: node.pos, chance, dist: node.dist };
+      if (!best || candidate.chance > best.chance
+        || (candidate.chance === best.chance && candidate.dist < best.dist)
+        || (candidate.chance === best.chance && candidate.dist === best.dist
+          && (candidate.pos.y < best.pos.y
+            || (candidate.pos.y === best.pos.y && candidate.pos.x < best.pos.x)))) {
+        best = candidate;
+      }
+    }
+  }
+  return best?.pos ?? null;
+}
+
+/**
+ * Holding behaviour for guards and guardians: shoot whenever a legal shot
+ * exists (even below the normal repositioning threshold); otherwise move only
+ * with at least 2 AP to a nearby destination that both shoots an enemy and has
+ * directional cover from that enemy; otherwise wait.
+ */
+function decideHold(state: GameState, unit: Unit): AiStep {
+  const unitId = unit.id;
+  const enemies = livingUnits(state, unit.team === 'alien' ? 'squad' : 'alien');
+  if (!canAct(state, unit) || enemies.length === 0) return { kind: 'wait', unitId };
+
+  const target = bestTarget(state, unit, enemies);
+  if (target) return { kind: 'shoot', unitId, targetId: target.target.id };
+
+  if (unit.ap >= 2) {
+    const destination = holdDestination(state, unit, enemies);
+    if (destination) return { kind: 'move', unitId, to: destination };
+  }
+
+  return { kind: 'wait', unitId };
 }
 
 /** Score a destination: closer to enemies is better, cover and a shot are better. */
@@ -49,6 +107,7 @@ function scoreTile(state: GameState, unit: Unit, tile: Vec, enemies: Unit[]): nu
 /** Decide one action for a unit, or wait if nothing useful remains. */
 export function decide(state: GameState, unitId: string): AiStep {
   const unit = unitById(state, unitId);
+  if (unit.stance === 'hold') return decideHold(state, unit);
   const enemies = livingUnits(state, unit.team === 'alien' ? 'squad' : 'alien');
   if (!canAct(state, unit) || enemies.length === 0) return { kind: 'wait', unitId };
 

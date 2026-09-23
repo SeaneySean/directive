@@ -1,12 +1,21 @@
 import { previewShot } from './combat.ts';
-import { parseMap, same } from './map.ts';
+import { inBounds, isWalkable, parseMap, same } from './map.ts';
 import { reachable } from './pathfinding.ts';
 import { rollPercent } from './rng.ts';
-import type { GameState, Scenario, Team, Unit, Vec } from './types.ts';
+import type { GameState, Reinforcements, Scenario, Team, Unit, Vec } from './types.ts';
 
 // All functions here are pure: they take a state and return a new one.
 
 export function createGame(scenario: Scenario, seed = 1): GameState {
+  const reinforcements: Reinforcements | undefined = scenario.reinforcements
+    ? {
+        fromRound: scenario.reinforcements.fromRound,
+        every: scenario.reinforcements.every,
+        max: scenario.reinforcements.max,
+        spawns: scenario.reinforcements.spawns.map((s) => ({ ...s })),
+        unit: { ...scenario.reinforcements.unit, weapon: { ...scenario.reinforcements.unit.weapon } },
+      }
+    : undefined;
   return {
     grid: parseMap(scenario.rows),
     units: scenario.units.map((u) => ({ ...u, pos: { ...u.pos }, weapon: { ...u.weapon } })),
@@ -20,6 +29,8 @@ export function createGame(scenario: Scenario, seed = 1): GameState {
       ? { tile: { ...scenario.objective.tile }, holdRounds: scenario.objective.holdRounds }
       : undefined,
     objectiveHoldRounds: 0,
+    reinforcements,
+    reinforcementsSpawned: 0,
   };
 }
 
@@ -126,6 +137,44 @@ export function endTurn(state: GameState): GameState {
   const nextTeam: Team = state.turn === 'squad' ? 'alien' : 'squad';
   const round = nextTeam === 'squad' ? state.round + 1 : state.round;
   const units = state.units.map((u) => (u.team === nextTeam && u.alive ? { ...u, ap: u.maxAp } : u));
-  const next: GameState = { ...state, units, turn: nextTeam, round, selectedId: null };
+  let next: GameState = { ...state, units, turn: nextTeam, round, selectedId: null };
+  // Reinforcements arrive on the squad-to-alien transition at a scheduled round.
+  if (nextTeam === 'alien') next = maybeSpawnReinforcement(next);
   return log(next, nextTeam === 'squad' ? `Round ${round}: your move.` : 'Enemy turn.');
+}
+
+/** True when the alien turn beginning at `round` is a scheduled arrival. */
+function isReinforcementRound(state: GameState, round: number): boolean {
+  const r = state.reinforcements;
+  if (!r) return false;
+  if (round < r.fromRound) return false;
+  if ((round - r.fromRound) % r.every !== 0) return false;
+  return state.reinforcementsSpawned < r.max;
+}
+
+/** First in-bounds walkable spawn tile unoccupied by a living unit, or null. */
+function freeSpawnTile(state: GameState): Vec | null {
+  const spawns = state.reinforcements!.spawns;
+  for (const tile of spawns) {
+    if (!inBounds(state.grid, tile)) continue;
+    if (!isWalkable(state.grid, tile)) continue;
+    if (state.units.some((unit) => unit.alive && same(unit.pos, tile))) continue;
+    return { ...tile };
+  }
+  return null;
+}
+
+function maybeSpawnReinforcement(state: GameState): GameState {
+  if (!isReinforcementRound(state, state.round)) return state;
+  const tile = freeSpawnTile(state);
+  // All spawns blocked: skip this arrival without consuming cap or id; the next
+  // scheduled round retries with no backlog.
+  if (!tile) return state;
+  const template = state.reinforcements!.unit;
+  const id = `r${state.reinforcementsSpawned + 1}`;
+  const unit: Unit = { ...template, id, pos: tile, ap: template.maxAp };
+  return log(
+    { ...state, units: [...state.units, unit], reinforcementsSpawned: state.reinforcementsSpawned + 1 },
+    'Alarm: reinforcements arrive.',
+  );
 }

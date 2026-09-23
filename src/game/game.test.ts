@@ -7,7 +7,7 @@ import { nextRandom, rollPercent } from './rng.ts';
 import { AREA51_HANGAR, ATLANTIS_RUINS, FARMSTEAD } from './scenarios.ts';
 import { createGame, endTurn, livingUnits, moveUnit, selectUnit, shoot, unitById } from './state.ts';
 import { decide, runTeamTurn, squadPolicy } from './ai.ts';
-import type { Scenario, Unit } from './types.ts';
+import type { GameState, Reinforcements, Scenario, Unit, Vec } from './types.ts';
 
 const small: Scenario = {
   name: 'test',
@@ -93,6 +93,47 @@ describe('line of sight and cover', () => {
     // target at 3,2 has cover tile at 2,2 to its west
     expect(inCover(g, { x: 3, y: 2 }, { x: 1, y: 2 })).toBe(true);
     expect(inCover(g, { x: 3, y: 2 }, { x: 4, y: 2 })).toBe(false);
+  });
+});
+
+describe('directional cover', () => {
+  // A grid with a single cover tile at `cover` and walls only on the border.
+  const gridWithCover = (cover: Vec, width = 9, height = 9) =>
+    parseMap(Array.from({ length: height }, (_, y) =>
+      Array.from({ length: width }, (_, x) =>
+        x === 0 || y === 0 || x === width - 1 || y === height - 1
+          ? '#'
+          : x === cover.x && y === cover.y
+            ? 'c'
+            : '.',
+      ).join(''),
+    ));
+
+  test('crate directly between shooter and target counts', () => {
+    const grid = gridWithCover({ x: 3, y: 3 });
+    expect(inCover(grid, { x: 4, y: 3 }, { x: 2, y: 3 })).toBe(true);
+  });
+
+  test('crate beside the target (perpendicular) does not count', () => {
+    const grid = gridWithCover({ x: 3, y: 3 });
+    expect(inCover(grid, { x: 4, y: 3 }, { x: 4, y: 1 })).toBe(false);
+  });
+
+  test('crate behind the target does not count', () => {
+    const grid = gridWithCover({ x: 2, y: 3 });
+    expect(inCover(grid, { x: 3, y: 3 }, { x: 4, y: 3 })).toBe(false);
+  });
+
+  test('a diagonal shooter at 45 degrees still counts', () => {
+    const grid = gridWithCover({ x: 4, y: 3 });
+    expect(inCover(grid, { x: 3, y: 3 }, { x: 4, y: 2 })).toBe(true);
+  });
+
+  test('regression: target (3,3), cover (4,3), shooter (4,6) is rejected', () => {
+    // The old positive-dot rule granted cover here (d . toShooter = 1), the
+    // 60-degree cone must reject it.
+    const grid = gridWithCover({ x: 4, y: 3 });
+    expect(inCover(grid, { x: 3, y: 3 }, { x: 4, y: 6 })).toBe(false);
   });
 });
 
@@ -302,5 +343,236 @@ describe('ai', () => {
     const waited = runTeamTurn(state, 'squad', (_state, unitId) => ({ kind: 'wait', unitId }));
     expect(waited.steps).toEqual([]);
     expect(waited.state.turn).toBe('alien');
+  });
+});
+
+describe('hold stance', () => {
+  const squadAt = (id: string, x: number, y: number): Unit => ({
+    id, name: id, team: 'squad', pos: { x, y }, hp: 12, maxHp: 12, ap: 2, maxAp: 2,
+    move: 4, weapon: { name: 'Rifle', range: 8, accuracy: 75, damage: 4 }, alive: true,
+  });
+  const guard = (id: string, x: number, y: number, range: number, ap = 2, accuracy = 60, move = 4, stance: 'hold' | 'advance' = 'hold'): Unit => ({
+    id, name: 'Guard', team: 'alien', pos: { x, y }, hp: 14, maxHp: 14, ap, maxAp: 2,
+    move, weapon: { name: 'Rifle', range, accuracy, damage: 4 }, alive: true, stance,
+  });
+  const open = (size = 8): string[] => [
+    '#'.repeat(size),
+    ...Array.from({ length: size - 2 }, () => `#${'.'.repeat(size - 2)}#`),
+    '#'.repeat(size),
+  ];
+
+  test('a holding guard shoots even below the normal repositioning threshold', () => {
+    const scenario: Scenario = {
+      name: 'hold-shoot',
+      rows: open(10),
+      units: [squadAt('s', 1, 1), guard('g', 8, 8, 8, 2, 30)],
+    };
+    const state = endTurn(createGame(scenario));
+    // Chebyshev distance 7 -> chance 30 - 6*4 = 6 (clamped to 5), far below 25.
+    expect(decide(state, 'g')).toMatchObject({ kind: 'shoot', targetId: 's' });
+  });
+
+  test('a holding guard repositions to a nearby covered firing spot', () => {
+    const rows = [
+      '########',
+      '#......#',
+      '#......#',
+      '#...c..#',
+      '#......#',
+      '#......#',
+      '#......#',
+      '########',
+    ];
+    const scenario: Scenario = {
+      name: 'hold-move', rows,
+      units: [squadAt('s', 5, 3), guard('g', 2, 3, 2)],
+    };
+    const state = endTurn(createGame(scenario));
+    // No shot from (2,3) (distance 3 > range 2). (3,3) is one step away, in
+    // range 2, and covered from (5,3) by the crate at (4,3).
+    expect(decide(state, 'g')).toEqual({ kind: 'move', unitId: 'g', to: { x: 3, y: 3 } });
+  });
+
+  test('a holding guard waits when no qualifying destination exists', () => {
+    const scenario: Scenario = {
+      name: 'hold-wait', rows: open(),
+      units: [squadAt('s', 5, 3), guard('g', 2, 3, 1)],
+    };
+    const state = endTurn(createGame(scenario));
+    expect(decide(state, 'g').kind).toBe('wait');
+  });
+
+  test('a holding guard with insufficient AP waits instead of moving', () => {
+    const scenario: Scenario = {
+      name: 'hold-ap', rows: open(),
+      units: [squadAt('s', 5, 3), guard('g', 2, 3, 2, 1)],
+    };
+    const state = endTurn(createGame(scenario));
+    expect(decide(state, 'g').kind).toBe('wait');
+  });
+
+  test('the movement bound caps repositioning at 2 steps even with move 4', () => {
+    const scenario: Scenario = {
+      name: 'hold-bound', rows: open(9),
+      units: [squadAt('s', 6, 3), guard('g', 1, 3, 2, 2, 60, 4)],
+    };
+    const state = endTurn(createGame(scenario));
+    // The only in-range shot sits at (4,3), three steps away; the guard may not
+    // reach it and so waits rather than walking further than 2 steps.
+    expect(decide(state, 'g').kind).toBe('wait');
+  });
+
+  test('an advance-stance (default) guard closes distance instead of holding', () => {
+    const scenario: Scenario = {
+      name: 'advance', rows: open(),
+      units: [squadAt('s', 6, 3), guard('g', 1, 3, 2, 2, 60, 4, 'advance')],
+    };
+    const state = endTurn(createGame(scenario));
+    expect(decide(state, 'g').kind).toBe('move');
+  });
+});
+
+describe('reinforcements', () => {
+  const reinf = (over: Partial<Reinforcements> = {}): Scenario => ({
+    name: 'reinf',
+    rows: ['#######', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#######'],
+    units: [{ id: 's', name: 'S', team: 'squad', pos: { x: 1, y: 1 }, hp: 12, maxHp: 12, ap: 2, maxAp: 2, move: 4, weapon: { name: 'R', range: 8, accuracy: 75, damage: 4 }, alive: true }],
+    reinforcements: {
+      fromRound: 2, every: 2, max: 3,
+      spawns: [{ x: 5, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 3 }],
+      unit: { name: 'Guard', team: 'alien', hp: 14, maxHp: 14, ap: 2, maxAp: 2, move: 4, weapon: { name: 'Rifle', range: 7, accuracy: 60, damage: 4 }, alive: true, stance: 'advance' },
+      ...over,
+    },
+  });
+  const alienIds = (state: GameState) => livingUnits(state, 'alien').map((unit) => unit.id);
+
+  test('spawns on the first scheduled round and every interval after', () => {
+    let state = createGame(reinf());
+    expect(alienIds(state)).toEqual([]);
+    state = endTurn(state); // alien turn, round 1: before fromRound
+    expect(state.reinforcementsSpawned).toBe(0);
+    state = endTurn(state); // squad turn, round 2
+    state = endTurn(state); // alien turn, round 2: first arrival
+    expect(state.reinforcementsSpawned).toBe(1);
+    expect(alienIds(state)).toContain('r1');
+    state = endTurn(state); // squad turn, round 3
+    state = endTurn(state); // alien turn, round 3: not scheduled
+    expect(state.reinforcementsSpawned).toBe(1);
+    state = endTurn(state); // squad turn, round 4
+    state = endTurn(state); // alien turn, round 4: second arrival
+    expect(state.reinforcementsSpawned).toBe(2);
+    expect(alienIds(state)).toContain('r2');
+  });
+
+  test('respects the max cap and never exceeds it', () => {
+    let state = createGame(reinf());
+    for (let i = 0; i < 8; i++) state = endTurn(state); // reaches round 5, spawns at 2 and 4
+    expect(state.reinforcementsSpawned).toBe(2);
+    for (let i = 0; i < 10; i++) state = endTurn(state); // well past round 8
+    expect(state.reinforcementsSpawned).toBe(3); // capped at max 3
+    expect(alienIds(state)).toEqual(['r1', 'r2', 'r3']);
+  });
+
+  test('skips to the first free spawn tile when an earlier one is blocked', () => {
+    const blocked = reinf();
+    blocked.units.push({ id: 'b', name: 'B', team: 'squad', pos: { x: 5, y: 1 }, hp: 12, maxHp: 12, ap: 2, maxAp: 2, move: 4, weapon: { name: 'R', range: 8, accuracy: 75, damage: 4 }, alive: true });
+    let state = createGame(blocked);
+    state = endTurn(state);
+    state = endTurn(state);
+    state = endTurn(state); // round 2 arrival, first tile blocked
+    expect(state.reinforcementsSpawned).toBe(1);
+    const spawned = state.units.find((unit) => unit.id === 'r1')!;
+    expect(spawned.pos).toEqual({ x: 5, y: 2 });
+  });
+
+  test('skips a fully-blocked arrival without consuming cap or id', () => {
+    const full = reinf({ spawns: [{ x: 5, y: 1 }] });
+    full.units.push({ id: 'b', name: 'B', team: 'squad', pos: { x: 5, y: 1 }, hp: 12, maxHp: 12, ap: 2, maxAp: 2, move: 4, weapon: { name: 'R', range: 8, accuracy: 75, damage: 4 }, alive: true });
+    let state = createGame(full);
+    for (let i = 0; i < 3; i++) state = endTurn(state); // round 2 arrival, blocked
+    expect(state.reinforcementsSpawned).toBe(0);
+    // Remove the blocker and arrive again: still r1, cap untouched.
+    state = { ...state, units: state.units.filter((unit) => unit.id !== 'b') };
+    state = endTurn(state); // squad turn, round 3
+    state = endTurn(state); // alien turn, round 3: not scheduled
+    state = endTurn(state); // squad turn, round 4
+    state = endTurn(state); // alien turn, round 4: retried
+    expect(state.reinforcementsSpawned).toBe(1);
+    expect(state.units.find((unit) => unit.id === 'r1')!.pos).toEqual({ x: 5, y: 1 });
+  });
+
+  test('spawned units count toward the kill-all win', () => {
+    const lowHp = reinf({
+      unit: { name: 'Guard', team: 'alien', hp: 4, maxHp: 4, ap: 2, maxAp: 2, move: 4, weapon: { name: 'Rifle', range: 7, accuracy: 60, damage: 4 }, alive: true, stance: 'advance' },
+    });
+    let result: ReturnType<typeof shoot> = null;
+    for (let seed = 1; seed <= 60 && !result?.killed; seed++) {
+      let state = createGame(lowHp, seed);
+      for (let i = 0; i < 4; i++) state = endTurn(state); // r1 spawns, back to squad turn
+      expect(alienIds(state)).toContain('r1');
+      result = shoot(state, 's', 'r1');
+    }
+    expect(result?.killed).toBe(true);
+    expect(result!.state.outcome).toBe('won');
+    expect(livingUnits(result!.state, 'alien')).toHaveLength(0);
+  });
+
+  test('assigns unique ids that do not repeat after casualties', () => {
+    const casualty = reinf({ spawns: [{ x: 5, y: 1 }, { x: 5, y: 2 }] });
+    let state = createGame(casualty);
+    for (let i = 0; i < 3; i++) state = endTurn(state); // r1 spawns
+    // Kill r1, then continue to the next arrival: the id advances to r2.
+    state = { ...state, units: state.units.map((unit) => unit.id === 'r1' ? { ...unit, alive: false, hp: 0 } : unit) };
+    for (let i = 0; i < 4; i++) state = endTurn(state); // reach alien turn round 4
+    expect(state.reinforcementsSpawned).toBe(2);
+    expect(state.units.filter((unit) => unit.id.startsWith('r')).map((unit) => unit.id)).toEqual(['r1', 'r2']);
+  });
+
+  test('does not mutate the scenario or its shared unit template', () => {
+    const scenario = reinf();
+    const templateBefore = JSON.stringify(scenario.reinforcements);
+    let state = createGame(scenario);
+    for (let i = 0; i < 3; i++) state = endTurn(state);
+    expect(JSON.stringify(scenario.reinforcements)).toBe(templateBefore);
+    expect(state.reinforcements).not.toBe(scenario.reinforcements);
+    expect(state.reinforcements!.unit).not.toBe(scenario.reinforcements!.unit);
+  });
+
+  test('independent games from the same scenario share no mutable state', () => {
+    const scenario = reinf();
+    const a = createGame(scenario);
+    const b = createGame(scenario);
+    for (let i = 0; i < 3; i++) endTurn(a);
+    expect(b.reinforcementsSpawned).toBe(0);
+    expect(livingUnits(b, 'alien')).toHaveLength(0);
+  });
+
+  test('terminal games never spawn', () => {
+    let state = createGame(reinf());
+    state = { ...state, outcome: 'lost' };
+    for (let i = 0; i < 3; i++) state = endTurn(state);
+    expect(state.reinforcementsSpawned).toBe(0);
+  });
+
+  test('completing the objective wins before spawning', () => {
+    const objective = reinf({ fromRound: 1 });
+    objective.objective = { tile: { x: 1, y: 1 }, holdRounds: 1 };
+    // Soldier starts on the objective tile; the first squad turn end wins.
+    const state = endTurn(createGame(objective));
+    expect(state.outcome).toBe('won');
+    expect(state.reinforcementsSpawned).toBe(0);
+  });
+
+  test('killing the last living enemy wins even with future arrivals scheduled', () => {
+    const scenario = reinf();
+    scenario.units.push({ id: 'a', name: 'A', team: 'alien', pos: { x: 3, y: 1 }, hp: 4, maxHp: 4, ap: 2, maxAp: 2, move: 4, weapon: { name: 'P', range: 6, accuracy: 65, damage: 4 }, alive: true });
+    let state = createGame(scenario);
+    // Kill the lone alien: even though round 2 would spawn a reinforcement,
+    // the win is immediate.
+    let result = shoot(state, 's', 'a');
+    for (let seed = 2; !result?.killed && seed < 50; seed++) result = shoot(createGame(scenario, seed), 's', 'a');
+    expect(result?.killed).toBe(true);
+    expect(result!.state.outcome).toBe('won');
+    expect(result!.state.reinforcementsSpawned).toBe(0);
   });
 });
