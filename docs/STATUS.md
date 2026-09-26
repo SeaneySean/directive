@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 26 Sep 2026, evening. Four days left. Deadline: 30 Sep 2026.
+Last updated: 26 Sep 2026, night. Three days left. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -15,7 +15,7 @@ Last updated: 26 Sep 2026, evening. Four days left. Deadline: 30 Sep 2026.
 | 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | merged; PLAY THIS |
 | 7b | Persistent squad: HP and kills carry over, promotion at 5 kills, deaths cost 40 to replace | merged |
 | 7a-spawn | Missions spawn from your actions, one or two open at a time, sidebar tabs, map clear | merged; PLAY THIS |
-| 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | part 1 (rules) building now; part 2 (camera, fog, radar, city tiles) next |
+| 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | rules merged (invisible until the renderer lands); part 2 building now: camera, fog, radar, city tiles |
 | 7d | Polish, Loom, Skool post | last |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
 
