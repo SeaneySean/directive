@@ -15,7 +15,7 @@ Last updated: 26 Sep 2026, morning. Four days left. Deadline: 30 Sep 2026.
 | 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | merged; PLAY THIS |
 | 7b | Persistent squad: HP and kills carry over, promotion at 5 kills, deaths cost 40 to replace | merged |
 | 7a-spawn | Your 23 Sep note: missions spawn from your actions, one or two open at a time, panel out of the map | Orpheus building now (OpenRouter credit restored 26 Sep) |
-| 7c | Overwatch and grenades | decision pending: with four days left this may be cut to protect 7d |
+| 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | brief written, replaces 7c; runs right after 7a-spawn |
 | 7d | Polish, Loom, Skool post | last |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
 

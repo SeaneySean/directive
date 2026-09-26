@@ -24,7 +24,8 @@ missions, and the squad that fights them is the thing you care about.
 2. **The squad persists (7b).** Soldiers carry HP and kills between missions, heal per
    campaign turn, promote at five kills, stay dead when killed, and cost treasury to replace.
    Roster on the world screen.
-3. **Two more verbs (7c).** Overwatch and grenades.
+3. **Real levels (7e, replaces 7c on 26 Sep).** Big district maps with buildings and roads,
+   fog of war, a radar with the objective's last known position, camera scrolling.
 4. **Ship (7d).** Polish, Loom, Skool post. No mobile sizing, no shop, no new enemy classes.
 
 Master stays shippable every night: the v1 cut is already a complete game.
@@ -178,5 +179,5 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | merged 23 Sep |
 | 7b | Persistent squad, roster, promotions, replacements | worker → critic | merged 23 Sep |
 | 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | next |
-| 7c | Overwatch and grenades | worker → critic | |
+| 7e | Real levels: 36x36+ districts, fog of war, radar, camera, city tileset (two runs) | worker → critic | after 7a-spawn |
 | 7d | Polish, Loom, Skool post | conductor | last |
