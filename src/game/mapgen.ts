@@ -185,10 +185,11 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
     if (isKey) keyBuilding = rec;
   }
 
-  // 2. Find the "key" block nearest the north-centre: it hosts the assassination
-  // target / recover item, so the objective tile is off the road grid.
+  // 2. Find the "key" block nearest the deep far-third centre: it hosts the
+  // assassination target / recover item, deep enough that a fleeing target has
+  // runway to the far-edge exits yet still inside a building.
   const centreX = width / 2;
-  const centreY = height / 6;
+  const centreY = Math.max(2, Math.floor(height / 3) - 3);
   let keyBlock: { x0: number; y0: number; x1: number; y1: number } | null = null;
   let bestDist = Infinity;
   for (let ri = 0; ri + 1 < rows.length; ri++) {
@@ -262,12 +263,12 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
     objective = { kind: 'recover', tile: item, extraction: squadPositions.map((p) => ({ ...p })) };
     searchMarker = { ...item };
   } else if (type === 'assassinate') {
-    const host = keyBuilding ?? buildings.find((b) => b.y < farThird);
-    if (!host) throw new Error(`no host building for assassination (seed ${seed})`);
-    // Target on a central interior tile; bodyguards beside it (Chebyshev 1),
-    // never on a doorway. `host.floors` is interior-only, so doorways are excluded.
-    const interior = host.floors;
-    const target = pickDistinct(interior, 1, randInt)[0] ?? host.floors[0]!;
+    // The target spawns on the deepest floor tile of the key building (deep in
+    // the far third) with bodyguards beside it (Chebyshev 1), never on a doorway.
+    if (!keyBuilding) throw new Error(`no host building for assassination (seed ${seed})`);
+    const interior = keyBuilding.floors;
+    const farFloors = interior.filter((f) => f.y < farThird);
+    const target = [...(farFloors.length ? farFloors : interior)].sort((a, b) => b.y - a.y || b.x - a.x)[0]!;
     reserve(target);
 
     const beside = interior.filter((p) =>
@@ -285,7 +286,7 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
     const exits = pickDistinct(floorsOf((p) => p.y === 0), 3, randInt);
     for (const e of exits) reserve(e);
     objective = { kind: 'assassinate', targetId: 't1', exits };
-    searchMarker = { x: host.x + Math.floor(host.w / 2), y: host.y + Math.floor(host.h / 2) };
+    searchMarker = { x: keyBuilding.x + Math.floor(keyBuilding.w / 2), y: keyBuilding.y + Math.floor(keyBuilding.h / 2) };
   } else {
     // Clash: four operatives across the far half, some inside buildings.
     const interiorPool = buildings.flatMap((b) => b.floors.filter((p) => p.y < farHalf));
