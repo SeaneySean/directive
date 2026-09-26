@@ -31,15 +31,22 @@ export interface Soldier {
   weapon: WeaponId;
 }
 
-/** A per-region, per-turn generated mission, frozen until the next campaign turn. */
+/**
+ * A generated mission that spawned in a region, frozen until it is launched or
+ * expires. Offer identity, type, path and seed are preserved across turns.
+ */
 export interface MissionOffer {
-  /** Turn-scoped identity: `${regionId}:${turn}`, stable within a turn. */
+  /** Identity: `${regionId}:${spawnTurn}`, stable until the offer settles. */
   id: string;
   regionId: string;
   type: MissionType;
   path: InfluencePath;
   seed: number;
   status: MissionOfferStatus;
+  /** The campaign turn on which this offer first appeared. */
+  spawnTurn: number;
+  /** The turn before which the offer is available; it expires on entry to this turn. */
+  expiresTurn: number;
 }
 
 export interface MissionProgress {

@@ -24,6 +24,7 @@ import {
   availableOffers,
   launchOffer,
   offerScenario,
+  offerTransition,
   OFFER_EXPOSURE,
   OFFER_INFLUENCE_GAIN,
   remainingAgents,
@@ -35,6 +36,8 @@ import {
   EVENT_CONTEXT,
   MISSION_TEXT,
   OFFER_TEXT,
+  OFFER_TYPE_LABEL,
+  OFFER_TYPE_WORD,
   RESEARCH_TEXT,
   guideText,
   regionDescription,
@@ -75,8 +78,9 @@ export class WorldScene extends Phaser.Scene {
   private objects: Phaser.GameObjects.GameObject[] = [];
   private hoverText!: Phaser.GameObjects.Text;
   private dismissedGuideTurns = new Set<number>();
-  private offersPage = 0;
-  private squadsTab = false;
+  private tab: 'actions' | 'missions' | 'squad' = 'actions';
+  private notices: ReturnType<typeof offerTransition> | null = null;
+  private dismissedNoticeTurn: number | null = null;
 
   constructor() {
     super('world');
@@ -131,7 +135,6 @@ export class WorldScene extends Phaser.Scene {
 
     this.drawMap();
     this.drawHud();
-    this.drawMissionsPanel();
     this.drawResearchPanel();
     this.drawHelpButton();
     this.drawGuide();
@@ -182,6 +185,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.state.outcome === 'playing' && !pendingEvent(this.state)) {
       hit.on('pointerdown', () => {
         this.selectedRegionId = region.id;
+        this.tab = 'actions';
         this.redraw();
       });
     }
@@ -229,6 +233,12 @@ export class WorldScene extends Phaser.Scene {
         new Phaser.Geom.Point(gx, gy + 5),
         new Phaser.Geom.Point(gx - 5, gy),
       ], true);
+      // The glyph pulses for the turn its offer spawned.
+      const justSpawned = this.dismissedNoticeTurn !== this.state.turn
+        && this.notices?.spawned.some((offer) => offer.regionId === region.id);
+      if (justSpawned) {
+        this.tweens.add({ targets: glyph, alpha: { from: 0.25, to: 1 }, duration: 520, yoyo: true, repeat: -1 });
+      }
     }
   }
 
@@ -252,12 +262,13 @@ export class WorldScene extends Phaser.Scene {
     exposureBar.fillStyle(COL.empty, 1).fillRect(PANEL_X + 16, 210, 248, 14);
     exposureBar.fillStyle(COL.exposure, 1).fillRect(PANEL_X + 16, 210, (248 * this.state.exposure) / 100, 14);
 
-    const region = this.state.regions.find((candidate) => candidate.id === this.selectedRegionId);
-    if (region) this.drawActionPicker(region);
-    else this.track(this.add.text(PANEL_X + 16, 252, 'SELECT A REGION', textStyle(13, HEX.dim))).setDepth(11);
+    this.drawTabs();
 
     const endTurn = this.track(goldButton(this, PANEL_X + 20, 655, 'END TURN', () => {
-      this.state = endTurnCampaign(this.state);
+      const before = this.state;
+      this.state = endTurnCampaign(before);
+      this.notices = offerTransition(before, this.state);
+      this.dismissedNoticeTurn = null;
       this.redraw();
     }, { size: 16, padding: { x: 14, y: 9 } }));
     endTurn.setDepth(11);
@@ -265,6 +276,36 @@ export class WorldScene extends Phaser.Scene {
       endTurn.disableInteractive();
       endTurn.setAlpha(0.5);
     }
+  }
+
+  /** Mutually exclusive ACTIONS / MISSIONS / SQUAD tabs below the Exposure bar. */
+  private drawTabs(): void {
+    const tabY = 238;
+    let x = PANEL_X + 16;
+    const entries: ReadonlyArray<readonly ['actions' | 'missions' | 'squad', string]> = [
+      ['actions', 'ACTIONS'],
+      ['missions', 'MISSIONS'],
+      ['squad', 'SQUAD'],
+    ];
+    for (const [id, label] of entries) {
+      const button = this.track(goldButton(this, x, tabY, label, () => {
+        this.tab = id;
+        this.redraw();
+      }, { size: 11, padding: { x: 6, y: 4 } })).setDepth(11);
+      if (this.tab === id) button.setBackgroundColor(HEX.goldHover);
+      x += button.width + 6;
+    }
+
+    const contentTop = 268;
+    if (this.tab === 'actions') this.drawActionTab(contentTop);
+    else if (this.tab === 'missions') this.drawMissionsTab(contentTop);
+    else this.drawSquadTab(contentTop);
+  }
+
+  private drawActionTab(top: number): void {
+    const region = this.state.regions.find((candidate) => candidate.id === this.selectedRegionId);
+    if (region) this.drawActionPicker(region, top);
+    else this.track(this.add.text(PANEL_X + 16, top + 2, 'SELECT A REGION', textStyle(13, HEX.dim))).setDepth(11);
   }
 
   private attachHover(object: Phaser.GameObjects.GameObject, copy: string): void {
@@ -285,6 +326,25 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawGuide(): void {
+    // Spawn/expiry notices take over the strip for the current turn, before the guide.
+    if (this.notices && this.dismissedNoticeTurn !== this.state.turn) {
+      const lines = this.noticeLines();
+      if (lines.length) {
+        const height = 14 + lines.length * 22;
+        const strip = this.track(this.add.rectangle(WIDTH / 2, height / 2, WIDTH, height, COL.hintBg, 1))
+          .setStrokeStyle(1, COL.gold).setDepth(2000);
+        const text = this.track(this.add.text(26, 8, lines.join('\n'), textStyle(14, HEX.held, { lineSpacing: 6 }))).setDepth(2001);
+        void text;
+        const close = this.track(goldButton(this, 1230, 6, 'X', () => {
+          this.dismissedNoticeTurn = this.state.turn;
+          strip.destroy();
+          text.destroy();
+        }, { size: 13, padding: { x: 5, y: 2 } }));
+        close.setDepth(2002);
+        return;
+      }
+    }
+
     const copy = guideText(this.state.turn);
     if (!copy || this.dismissedGuideTurns.has(this.state.turn)) return;
     const strip = this.track(this.add.rectangle(WIDTH / 2, 16, WIDTH, 32, COL.hintBg, 1))
@@ -298,131 +358,98 @@ export class WorldScene extends Phaser.Scene {
     close.setDepth(2001);
   }
 
-  private drawMissionsPanel(): void {
-    const x = 600;
-    const top = 36;
-    const panelW = 388;
-    const depth = 20;
-    const tabH = 26;
-
-    const squadTab = this.track(goldButton(this, x + 92, top + 3, 'SQUAD', () => {
-      if (!this.squadsTab) { this.squadsTab = true; this.redraw(); }
-    }, { size: 10, padding: { x: 7, y: 4 } })).setDepth(depth + 2);
-    const missionTab = this.track(goldButton(this, x + 8, top + 3, 'MISSIONS', () => {
-      if (this.squadsTab) { this.squadsTab = false; this.redraw(); }
-    }, { size: 10, padding: { x: 7, y: 4 } })).setDepth(depth + 2);
-    (this.squadsTab ? squadTab : missionTab).setBackgroundColor(HEX.goldHover);
-
-    if (this.squadsTab) {
-      this.drawSquadPanel(x, top + tabH + 8, panelW, depth);
-      return;
+  /** The one-line spawn/expiry notices for the current turn's transition. */
+  private noticeLines(): string[] {
+    if (!this.notices) return [];
+    const lines: string[] = [];
+    for (const offer of this.notices.spawned) {
+      const region = this.state.regions.find((candidate) => candidate.id === offer.regionId);
+      lines.push(`New mission: ${OFFER_TYPE_WORD[offer.type]} in ${region?.name ?? offer.regionId}`);
     }
+    for (const entry of this.notices.expired) {
+      lines.push(`The window in ${entry.regionName} has closed`);
+    }
+    return lines;
+  }
 
-    const contentTop = top + tabH + 8;
+  private drawMissionsTab(top: number): void {
+    const x = PANEL_X + 16;
     const available = new Set(availableMissions(this.state).map((mission) => mission.id));
     const story = MISSIONS.filter((mission) =>
       available.has(mission.id) || this.state.missions[mission.id]?.status === 'completed',
     );
     const open = availableOffers(this.state);
-    const pageSize = 5;
-    const pageCount = Math.max(1, Math.ceil(open.length / pageSize));
-    const page = Math.min(this.offersPage, pageCount - 1);
-    const pageOffers = open.slice(page * pageSize, (page + 1) * pageSize);
     const canAct = this.state.outcome === 'playing' && !pendingEvent(this.state);
     const agents = remainingAgents(this.state);
     const noSquad = livingSoldiers(this.state).length === 0;
 
-    const rowH = 23;
-    const gutterH = 12;
-    const navH = 22;
-    const storyH = story.length ? story.length * rowH : 0;
-    const offersH = open.length ? (pageOffers.length * rowH + gutterH) : 0;
-    const totalH = (storyH ? storyH + 6 : 0)
-      + (open.length ? 16 + offersH : 0)
-      + (open.length ? navH : 0) + 18;
+    if (!story.length && !open.length) {
+      this.track(this.add.text(x, top, 'NO MISSIONS ACTIVE', textStyle(11, HEX.faint))).setDepth(11);
+      this.track(this.add.text(x, top + 20, 'Missions arise from your actions.', textStyle(10, HEX.dim))).setDepth(11);
+      return;
+    }
 
-    this.track(drawPanel(this, x, contentTop, panelW, totalH, { alpha: 0.97 })).setDepth(depth);
-    let y = contentTop + 12;
+    let y = top;
 
-    // Story missions first, unchanged behaviour.
+    // Story missions first: their existing cost and retry behaviour, no generated expiry.
     for (const mission of story) {
       const complete = this.state.missions[mission.id]?.status === 'completed';
-      this.track(this.add.text(x + 8, y, `${mission.name.toUpperCase()}  ${complete ? 'COMPLETE' : 'AVAILABLE'}`,
-        textStyle(11, complete ? HEX.complete : HEX.text))).setDepth(depth + 1);
+      const label = this.track(this.add.text(x, y, mission.name.toUpperCase(), textStyle(11, HEX.text, {
+        wordWrap: { width: 232 },
+      }))).setDepth(11);
+      const status = complete ? 'COMPLETE' : 'AVAILABLE';
+      this.track(this.add.text(x, y + label.height + 4, status, textStyle(10, complete ? HEX.complete : HEX.dim))).setDepth(11);
+      const launchY = y + label.height + 22;
       if (!complete) {
-        const launch = this.track(goldButton(this, x + panelW - 82, y - 5, noSquad ? 'NO SQUAD' : 'LAUNCH', () => {
+        const launch = this.track(goldButton(this, x, launchY, noSquad ? 'NO SQUAD' : 'LAUNCH', () => {
           this.drawMissionBriefing(mission.id, mission.name, mission.scenario);
-        }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(depth + 1);
+        }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(11);
         if (!canAct || noSquad) {
           launch.disableInteractive();
           launch.setAlpha(0.5);
         }
       }
-      y += rowH;
+      y += label.height + 58;
     }
 
-    if (!open.length) {
-      if (!story.length) {
-        this.track(this.add.text(x + 8, y, 'NO MISSIONS AVAILABLE', textStyle(11, HEX.faint))).setDepth(depth + 1);
-      }
-      return;
-    }
-
-    y += 4;
-    this.track(this.add.text(x + 8, y, `REGIONAL MISSIONS  ${agents} AGENT${agents === 1 ? '' : 'S'} FREE`, textStyle(11, HEX.dim))).setDepth(depth + 1);
-    y += 16;
-
-    for (const offer of pageOffers) {
+    for (const offer of open) {
       const region = this.state.regions.find((candidate) => candidate.id === offer.regionId);
-      const copy = OFFER_TEXT[offer.type];
-      const label = `${(region?.name ?? offer.regionId).toUpperCase()} · ${copy.name.split(' ')[0]} · +${OFFER_INFLUENCE_GAIN} ${offer.path.toUpperCase()}`;
-      this.track(this.add.text(x + 8, y, label, textStyle(11, HEX.text))).setDepth(depth + 1);
-      const launch = this.track(goldButton(this, x + panelW - 82, y - 5, noSquad ? 'NO SQUAD' : 'LAUNCH', () => {
+      const label = `${(region?.name ?? offer.regionId).toUpperCase()} · ${OFFER_TYPE_LABEL[offer.type]} · +${OFFER_INFLUENCE_GAIN} ${offer.path.toUpperCase()}`;
+      const labelText = this.track(this.add.text(x, y, label, textStyle(11, HEX.text, {
+        wordWrap: { width: 232 },
+      }))).setDepth(11);
+      const turnsLeft = offer.expiresTurn - this.state.turn;
+      const subY = y + labelText.height + 4;
+      this.track(this.add.text(x, subY, `expires in ${turnsLeft} turn${turnsLeft === 1 ? '' : 's'} · 1 agent`, textStyle(10, HEX.dim))).setDepth(11);
+      const launch = this.track(goldButton(this, x, subY + 18, noSquad ? 'NO SQUAD' : 'LAUNCH', () => {
         this.drawOfferBriefing(offer);
-      }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(depth + 1);
+      }, { size: 11, padding: { x: 5, y: 4 } })).setDepth(11);
       if (!canAct || agents <= 0 || noSquad) {
         launch.disableInteractive();
         launch.setAlpha(0.5);
       }
-      y += rowH;
-    }
-
-    if (pageCount > 1) {
-      const navY = y + 4;
-      this.track(goldButton(this, x + panelW - 150, navY, 'PREV', () => {
-        this.offersPage = (page + pageCount - 1) % pageCount;
-        this.redraw();
-      }, { size: 10, padding: { x: 5, y: 3 } })).setDepth(depth + 1);
-      this.track(this.add.text(x + panelW - 82, navY + 1, `${page + 1}/${pageCount}`, textStyle(11, HEX.text)).setOrigin(0.5, 0)).setDepth(depth + 1);
-      this.track(goldButton(this, x + panelW - 52, navY, 'NEXT', () => {
-        this.offersPage = (page + 1) % pageCount;
-        this.redraw();
-      }, { size: 10, padding: { x: 5, y: 3 } })).setDepth(depth + 1);
+      y += labelText.height + 54;
     }
   }
 
-  /** The four soldier slots, each with portrait, name, rank, HP and career kills. */
-  private drawSquadPanel(x: number, top: number, panelW: number, depth: number): void {
+  /** The four soldier slots with a RECRUIT control, inside the HUD. */
+  private drawSquadTab(top: number): void {
+    const x = PANEL_X + 8;
+    const panelW = WIDTH - PANEL_X - 16;
     const roster = this.state.roster;
     const living = roster.filter((soldier) => soldier.alive).length;
     const anyKia = roster.some((soldier) => !soldier.alive);
-
     const rowH = 52;
-    const warningH = living === 0 ? 20 : 0;
-    const recruitH = anyKia ? 36 : 0;
-    const totalH = roster.length * rowH + warningH + recruitH + 20;
 
-    this.track(drawPanel(this, x, top, panelW, totalH, { alpha: 0.97 })).setDepth(depth);
-    let y = top + 8;
-
+    let y = top;
     roster.forEach((soldier) => {
-      this.drawSquadSlot(x, y, panelW, soldier, depth);
+      this.drawSquadSlot(x, y, panelW, soldier, 11);
       y += rowH;
     });
 
     if (living === 0) {
-      this.track(this.add.text(x + 8, y + 2, 'NO SOLDIERS LEFT — RECRUIT A REPLACEMENT', textStyle(11, HEX.danger))).setDepth(depth + 1);
-      y += warningH;
+      this.track(this.add.text(x + 8, y + 2, 'NO SOLDIERS LEFT — RECRUIT A REPLACEMENT', textStyle(11, HEX.danger))).setDepth(12);
+      y += 20;
     }
 
     if (anyKia) {
@@ -430,7 +457,7 @@ export class WorldScene extends Phaser.Scene {
       const recruit = this.track(goldButton(this, x + 8, y + 4, `RECRUIT  —  TREASURY ${RECRUIT_COST}`, () => {
         this.state = recruitSoldier(this.state);
         this.redraw();
-      }, { size: 11, padding: { x: 8, y: 7 } })).setDepth(depth + 1);
+      }, { size: 11, padding: { x: 8, y: 7 } })).setDepth(12);
       if (!allowed) {
         recruit.disableInteractive();
         recruit.setAlpha(0.5);
@@ -568,14 +595,14 @@ export class WorldScene extends Phaser.Scene {
     }, { size: 17, padding: { x: 12, y: 7 } }));
   }
 
-  private drawActionPicker(region: RegionState): void {
-    this.track(this.add.text(PANEL_X + 16, 246, region.name.toUpperCase(), textStyle(16, HEX.white))).setDepth(11);
-    this.track(this.add.text(PANEL_X + 16, 272, `RESISTANCE ${region.resistance}  WEALTH ${region.wealth}`, textStyle(11, HEX.dim))).setDepth(11);
+  private drawActionPicker(region: RegionState, top: number): void {
+    this.track(this.add.text(PANEL_X + 16, top, region.name.toUpperCase(), textStyle(16, HEX.white))).setDepth(11);
+    this.track(this.add.text(PANEL_X + 16, top + 26, `RESISTANCE ${region.resistance}  WEALTH ${region.wealth}`, textStyle(11, HEX.dim))).setDepth(11);
 
     const assigned = this.state.assignments[region.id];
     if (assigned) {
-      this.track(this.add.text(PANEL_X + 16, 302, `ASSIGNED: ${ACTIONS[assigned]!.name}`, textStyle(12, HEX.gold))).setDepth(11);
-      const clear = this.track(this.add.text(PANEL_X + 16, 330, ' CLEAR ASSIGNMENT ', textStyle(12, HEX.white, {
+      this.track(this.add.text(PANEL_X + 16, top + 56, `ASSIGNED: ${ACTIONS[assigned]!.name}`, textStyle(12, HEX.gold))).setDepth(11);
+      const clear = this.track(this.add.text(PANEL_X + 16, top + 84, ' CLEAR ASSIGNMENT ', textStyle(12, HEX.white, {
         backgroundColor: HEX.dangerBg,
         padding: { x: 5, y: 5 },
       }))).setDepth(11);
@@ -591,7 +618,7 @@ export class WorldScene extends Phaser.Scene {
 
     const legal = new Set(availableActions(this.state, region.id).map((action) => action.id));
     Object.values(ACTIONS).forEach((action, index) => {
-      const y = 302 + index * 46;
+      const y = top + 56 + index * 44;
       const available = legal.has(action.id);
       const label = this.track(this.add.text(PANEL_X + 16, y, `${action.name.toUpperCase()}  £${actionCost(this.state, action)}\n${this.effectLabel(action.id)}`, textStyle(11, available ? HEX.text : HEX.faint, {
         backgroundColor: available ? HEX.actionAvailable : HEX.actionDisabled,

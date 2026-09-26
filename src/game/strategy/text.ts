@@ -89,7 +89,7 @@ export const HELP_PANELS: readonly HelpPanelCopy[] = [
   },
   {
     title: 'RESEARCH & MISSIONS',
-    body: 'Research unlocks agents, exact intelligence and AGI. Every region offers a mission each turn; winning flips a region fastest, and each launch spends one agent. Area 51 and Atlantis remain as story missions.',
+    body: 'Research unlocks agents, exact intelligence and AGI. Missions arise from your actions: winning one flips a region fastest, and each launch spends an agent. Area 51 and Atlantis remain as story missions.',
   },
   {
     title: 'BATTLE CONTROLS',
@@ -98,7 +98,7 @@ export const HELP_PANELS: readonly HelpPanelCopy[] = [
 ];
 
 export function guideText(turn: number): string | null {
-  if (turn === 1) return 'Pick a region, assign an action or launch a mission, then END TURN. Watch Exposure.';
+  if (turn === 1) return 'Pick a region and assign an action — missions arise from your actions. Then END TURN. Watch Exposure.';
   if (turn === 2) return 'Choose a research project now; it advances every END TURN.';
   return null;
 }
@@ -156,4 +156,18 @@ export const OFFER_TEXT: Readonly<Record<MissionType, OfferCopy>> = {
     enemies: '4 smart operatives',
     specials: '',
   },
+};
+
+/** Short capitalised type word for the compact mission list ("RECOVER"). */
+export const OFFER_TYPE_LABEL: Readonly<Record<MissionType, string>> = {
+  recover: 'RECOVER',
+  assassinate: 'ASSASSINATE',
+  clash: 'CLASH',
+};
+
+/** Lowercase noun for spawn notices ("assassination"). */
+export const OFFER_TYPE_WORD: Readonly<Record<MissionType, string>> = {
+  recover: 'recovery',
+  assassinate: 'assassination',
+  clash: 'clash',
 };

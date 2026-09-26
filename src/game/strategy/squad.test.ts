@@ -18,7 +18,7 @@ import {
   settleRoster,
 } from './roster.ts';
 import { createGame, shoot } from '../state.ts';
-import type { GameState, Scenario, Unit } from '../types.ts';
+import type { GameState, MissionType, Scenario, Unit } from '../types.ts';
 import type { CampaignState, Soldier } from './types.ts';
 
 const ALL_EVENTS = ['candidate', 'leak', 'whistleblower', 'miracle-at-the-well', 'summit'];
@@ -39,6 +39,23 @@ function kia(state: CampaignState, index = 0): CampaignState {
 
 function killAll(state: CampaignState): CampaignState {
   return withRoster(state, state.roster.map((soldier) => ({ ...soldier, hp: 0, alive: false })));
+}
+
+/** A single open generated offer of the given type in the first region. */
+function withOffer(state: CampaignState, type: MissionType): CampaignState {
+  return {
+    ...state,
+    offers: [{
+      id: `${state.regions[0]!.id}:${state.turn}`,
+      regionId: state.regions[0]!.id,
+      type,
+      path: type === 'clash' ? 'force' : 'subvert',
+      seed: 7,
+      status: 'open',
+      spawnTurn: state.turn,
+      expiresTurn: state.turn + 3,
+    }],
+  };
 }
 
 /** A finished battle with the given fielded squad results and kill attribution. */
@@ -135,7 +152,14 @@ describe('squad building', () => {
   });
 
   test('generated offers field the roster squad for every objective type', () => {
-    const state = createCampaign(5);
+    const state: CampaignState = {
+      ...createCampaign(5),
+      offers: [
+        { id: 'na:1', regionId: 'north-america', type: 'recover', path: 'subvert', seed: 1, status: 'open', spawnTurn: 1, expiresTurn: 4 },
+        { id: 'sa:1', regionId: 'south-america', type: 'assassinate', path: 'subvert', seed: 2, status: 'open', spawnTurn: 1, expiresTurn: 4 },
+        { id: 'eu:1', regionId: 'europe', type: 'clash', path: 'force', seed: 3, status: 'open', spawnTurn: 1, expiresTurn: 4 },
+      ],
+    };
     for (const offer of state.offers) {
       const scenario = offerScenario(state, offer.id);
       const squad = scenario.units.filter((unit) => unit.team === 'squad');
@@ -168,7 +192,7 @@ describe('squad building', () => {
 
 describe('launch rejection', () => {
   test('a zero-living roster cannot launch a generated offer', () => {
-    const state = noEvents(killAll(createCampaign(7)));
+    const state = noEvents(killAll(withOffer(createCampaign(7), 'recover')));
     const offerId = state.offers[0]!.id;
     expect(launchOffer(state, offerId)).toBe(state);
     expect(state.offers[0]!.status).toBe('open');
@@ -242,8 +266,8 @@ describe('result settlement', () => {
   });
 
   test('an assassination escape keeps surviving soldiers alive', () => {
-    let state = noEvents(createCampaign(12));
-    const offer = state.offers.find((candidate) => candidate.type === 'assassinate')!;
+    let state = noEvents(withOffer(createCampaign(12), 'assassinate'));
+    const offer = state.offers[0]!;
     state = launchOffer(state, offer.id);
     const battle = battleState(
       [
