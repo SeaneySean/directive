@@ -13,6 +13,7 @@ function cloneDistrict(district: DistrictMetadata | undefined): DistrictMetadata
   return {
     surfaces: district.surfaces.slice(),
     buildings: district.buildings.map((b) => ({ ...b, doorways: b.doorways.map((d) => ({ ...d })) })),
+    props: district.props.map((p) => ({ pos: { ...p.pos }, kind: p.kind })),
     searchMarker: { ...district.searchMarker },
   };
 }

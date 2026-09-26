@@ -23,7 +23,7 @@ const openRows = (w: number, h: number) => [
 ];
 
 function districtFor(width: number, height: number, searchMarker = { x: 0, y: 0 }): DistrictMetadata {
-  return { surfaces: new Array(width * height).fill('road' as const), buildings: [], searchMarker };
+  return { surfaces: new Array(width * height).fill('road' as const), buildings: [], props: [], searchMarker };
 }
 
 describe('fog squad pursuit', () => {

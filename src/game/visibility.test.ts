@@ -132,7 +132,7 @@ describe('enemy memory', () => {
 });
 
 describe('fog-gated shooting', () => {
-  const district: DistrictMetadata = { surfaces: [], buildings: [], searchMarker: { x: 0, y: 0 } };
+  const district: DistrictMetadata = { surfaces: [], buildings: [], props: [], searchMarker: { x: 0, y: 0 } };
 
   test('shoot rejects a squad attack on an unseen enemy without spending AP or RNG', () => {
     const rows = openRows(24, 24);
@@ -158,7 +158,7 @@ describe('fog-gated shooting', () => {
 });
 
 describe('squadShotPreview', () => {
-  const district: DistrictMetadata = { surfaces: [], buildings: [], searchMarker: { x: 0, y: 0 } };
+  const district: DistrictMetadata = { surfaces: [], buildings: [], props: [], searchMarker: { x: 0, y: 0 } };
 
   test('returns null for a hidden target on a fog map', () => {
     const rows = openRows(24, 24);

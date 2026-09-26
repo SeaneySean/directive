@@ -25,7 +25,7 @@ function scenario(unitList: Unit[], objective?: Scenario['objective'], district?
 }
 
 const district = (search: { x: number; y: number }): DistrictMetadata => ({
-  surfaces: [], buildings: [], searchMarker: search,
+  surfaces: [], buildings: [], props: [], searchMarker: search,
 });
 
 describe('radar', () => {

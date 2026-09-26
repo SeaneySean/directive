@@ -68,6 +68,21 @@ export interface DistrictBuilding {
   h: number;
   /** 1-tile floor doorways connecting the interior to the outside. */
   doorways: Vec[];
+  /** Cosmetic: number of stacked wall levels (1, 2 or 3). */
+  storeys: 1 | 2 | 3;
+  /** Cosmetic: facade treatment (0, 1 or 2). */
+  facade: 0 | 1 | 2;
+  /** Cosmetic: true on the single host building (recover/assassinate only). */
+  landmark: boolean;
+}
+
+/** The three street-furniture kinds a cover prop may be dressed as. */
+export type CoverKind = 'lamp' | 'tree' | 'crate';
+
+/** A single-tile street prop dressing an existing cover tile. */
+export interface CoverProp {
+  pos: Vec;
+  kind: CoverKind;
 }
 
 /** Optional, pure-data district metadata attached to generated scenarios. */
@@ -76,6 +91,8 @@ export interface DistrictMetadata {
   surfaces: SurfaceTag[];
   /** Rectangular buildings covering blocks, with their doorway tiles. */
   buildings: DistrictBuilding[];
+  /** One entry per cover tile, dressing it as a lamp/tree/crate. */
+  props: CoverProp[];
   /** Initial radar search marker (the assassination spawn district centre). */
   searchMarker: Vec;
 }
