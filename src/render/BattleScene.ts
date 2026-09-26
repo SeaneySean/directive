@@ -286,13 +286,14 @@ export class BattleScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.isDistrict || this.state.outcome !== 'playing' || this.busy) return;
-    if (!this.panKeys.size && !this.isEdgePointer()) return;
+    const edgeScroll = !this.dragStart && this.isEdgePointer();
+    if (!this.panKeys.size && !edgeScroll) return;
     const d = PAN_SPEED * delta;
     if (this.panKeys.has('left')) this.cam.x -= d;
     if (this.panKeys.has('right')) this.cam.x += d;
     if (this.panKeys.has('up')) this.cam.y -= d;
     if (this.panKeys.has('down')) this.cam.y += d;
-    if (this.isEdgePointer()) {
+    if (edgeScroll) {
       const p = this.input.activePointer;
       if (p.x < EDGE_SCROLL) this.cam.x -= d;
       else if (p.x > BOARD_W - EDGE_SCROLL) this.cam.x += d;
