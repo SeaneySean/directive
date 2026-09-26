@@ -1,6 +1,8 @@
 import { nextRandom } from './rng.ts';
 import type { InfluencePath } from './strategy/types.ts';
 import type {
+  CoverKind,
+  CoverProp,
   DistrictMetadata,
   MissionType,
   Reinforcements,
@@ -121,6 +123,36 @@ interface BuildingRec {
   doorways: Vec[];
   /** Walkable interior tiles, excluding doorways. */
   floors: Vec[];
+}
+
+/** The three street-furniture kinds, in deterministic assignment order. */
+const COVER_KINDS: CoverKind[] = ['tree', 'crate', 'lamp'];
+
+/**
+ * Dress every cover tile with a deterministic kind, using the caller's cosmetic
+ * RNG (never the gameplay stream). Guarantees all three kinds appear across the
+ * map and, when a pavement cover tile exists, that a lamp sits on one.
+ */
+function assignCoverKinds(
+  coverTiles: Vec[],
+  srf: SurfaceTag[][],
+  randInt: (bound: number) => number,
+): CoverProp[] {
+  const props: CoverProp[] = coverTiles.map((pos) => ({ pos: { ...pos }, kind: COVER_KINDS[randInt(3)]! }));
+  const surfaceOf = (p: Vec) => srf[p.y]![p.x]!;
+
+  // A lamp on existing pavement cover, when one is present.
+  const lampTile = props.find((p) => surfaceOf(p.pos) === 'pavement');
+  if (lampTile) lampTile.kind = 'lamp';
+
+  // Ensure every kind appears at least once, each on its own tile. We only
+  // repurpose a non-lamp tile whose current kind already appears elsewhere.
+  for (const want of COVER_KINDS) {
+    if (props.some((p) => p.kind === want)) continue;
+    const candidate = props.find((p) => p !== lampTile && props.filter((q) => q.kind === p.kind).length > 1);
+    if (candidate) candidate.kind = want;
+  }
+  return props;
 }
 
 export function generateMission(type: MissionType, path: InfluencePath, seed: number): Scenario {
@@ -429,6 +461,40 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
   const rowsOut = g.map((row) => row.join(''));
   const surfaces: SurfaceTag[] = srf.flat();
 
+  // --- Cosmetic dressing (strictly after gameplay generation). ---
+  // Uses an independent seeded stream so collision, spawns, objectives and the
+  // gameplay RNG are byte-for-byte unchanged by this decoration pass.
+  const cosRng = makeRng(((seed ^ PATH_SEED[path]) ^ 0x9e3779b9) | 0);
+  const cosInt = (bound: number) => Math.floor(cosRng() * bound);
+
+  // The landmark (recover item / assassination target) building is always the
+  // unique host and is always drawn three storeys tall.
+  const landmarkTile: Vec | null =
+    type === 'recover'
+      ? (objective as { kind: 'recover'; tile: Vec }).tile
+      : type === 'assassinate'
+        ? aliens.find((unit) => unit.stance === 'flee')!.pos
+        : null;
+  const landmarkIndex = landmarkTile
+    ? buildings.findIndex((b) => b.x <= landmarkTile.x && landmarkTile.x < b.x + b.w && b.y <= landmarkTile.y && landmarkTile.y < b.y + b.h)
+    : -1;
+
+  const storeys: (1 | 2 | 3)[] = buildings.map((_, i) => (i === landmarkIndex ? 3 : ((1 + cosInt(3)) as 1 | 2 | 3)));
+  if (buildings.length >= 4) {
+    // Guarantee all three heights across the district.
+    for (let h = 1 as 1 | 2 | 3; h <= 3; h++) {
+      if (storeys.includes(h)) continue;
+      const idx = storeys.findIndex((s, i) => i !== landmarkIndex && storeys.filter((x) => x === s).length > 1);
+      if (idx >= 0) storeys[idx] = h;
+    }
+  }
+
+  const facades: (0 | 1 | 2)[] = buildings.map(() => (cosInt(3) as 0 | 1 | 2));
+  if (buildings.length >= 4 && new Set(facades).size < 2) {
+    // Guarantee at least two facade treatments.
+    facades[Math.min(1, facades.length - 1)] = ((facades[0]! + 1) % 3) as 0 | 1 | 2;
+  }
+
   const district: DistrictMetadata = {
     surfaces,
     buildings: buildings.map((b, i) => ({
@@ -438,7 +504,11 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
       w: b.w,
       h: b.h,
       doorways: b.doorways.map((d) => ({ ...d })),
+      storeys: storeys[i]!,
+      facade: facades[i]!,
+      landmark: i === landmarkIndex,
     })),
+    props: assignCoverKinds(coverTiles, srf, cosInt),
     searchMarker,
   };
 

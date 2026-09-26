@@ -307,3 +307,78 @@ describe('district squad clustering', () => {
     }
   });
 });
+
+describe('district cosmetic dressing', () => {
+  test('200 seeds: deterministic metadata, variety and valid cover kinds', () => {
+    for (const type of TYPES) {
+      for (let seed = 1; seed <= 200; seed++) {
+        const path = PATHS[(seed - 1) % 3]!;
+        const scenario = generateMission(type, path, seed);
+        const grid = parseMap(scenario.rows);
+        const district = scenario.district!;
+        const message = `${type} ${path} seed ${seed}`;
+
+        // Every building carries valid cosmetic metadata.
+        for (const b of district.buildings) {
+          expect([1, 2, 3], `${message} building storeys`).toContain(b.storeys);
+          expect([0, 1, 2], `${message} building facade`).toContain(b.facade);
+          expect(typeof b.landmark, `${message} landmark boolean`).toBe('boolean');
+        }
+
+        // Districts with four or more buildings show all three heights and two facades.
+        if (district.buildings.length >= 4) {
+          expect(new Set(district.buildings.map((b) => b.storeys)).size, `${message} all three heights`).toBe(3);
+          expect(new Set(district.buildings.map((b) => b.facade)).size, `${message} at least two facades`).toBeGreaterThanOrEqual(2);
+        }
+
+        // Landmark: exactly one host building for recover/assassinate, never clash.
+        const landmarks = district.buildings.filter((b) => b.landmark);
+        if (type === 'clash') {
+          expect(landmarks.length, `${message} clash has no landmark`).toBe(0);
+        } else {
+          expect(landmarks.length, `${message} exactly one landmark`).toBe(1);
+          expect(landmarks[0]!.storeys, `${message} landmark is three storeys`).toBe(3);
+          const tile = type === 'recover'
+            ? (scenario.objective as { kind: 'recover'; tile: Vec }).tile
+            : scenario.units.find((unit) => unit.stance === 'flee')!.pos;
+          const host = landmarks[0]!;
+          expect(
+            tile.x >= host.x && tile.x < host.x + host.w && tile.y >= host.y && tile.y < host.y + host.h,
+            `${message} landmark hosts the objective tile`,
+          ).toBe(true);
+        }
+
+        // Cover props: one entry per cover tile, unique, valid, and all three kinds.
+        const coverTiles: Vec[] = [];
+        for (let y = 0; y < grid.height; y++) {
+          for (let x = 0; x < grid.width; x++) {
+            if (grid.tiles[y * grid.width + x] === 'cover') coverTiles.push({ x, y });
+          }
+        }
+        expect(district.props.length, `${message} one prop per cover tile`).toBe(coverTiles.length);
+        const propKeys = district.props.map((p) => key(p.pos));
+        expect(new Set(propKeys).size, `${message} no duplicate prop positions`).toBe(propKeys.length);
+        for (const p of district.props) {
+          expect(['lamp', 'tree', 'crate'], `${message} valid kind`).toContain(p.kind);
+          expect(grid.tiles[p.pos.y * grid.width + p.pos.x], `${message} prop sits on a cover tile`).toBe('cover');
+        }
+        expect(new Set(district.props.map((p) => p.kind)).size, `${message} all three kinds`).toBe(3);
+        const lampOnPavement = district.props.some(
+          (p) => p.kind === 'lamp' && district.surfaces[p.pos.y * grid.width + p.pos.x] === 'pavement',
+        );
+        expect(lampOnPavement, `${message} lamp on pavement cover`).toBe(true);
+      }
+    }
+  });
+
+  test('cosmetic metadata (buildings and props) is deterministic', () => {
+    for (const type of TYPES) {
+      for (const path of PATHS) {
+        const a = generateMission(type, path, 42);
+        const b = generateMission(type, path, 42);
+        expect(a.district!.buildings).toEqual(b.district!.buildings);
+        expect(a.district!.props).toEqual(b.district!.props);
+      }
+    }
+  });
+});

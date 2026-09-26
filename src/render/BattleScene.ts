@@ -10,6 +10,7 @@ import {
   key,
   livingUnits,
   moveUnit,
+  pathTo,
   previewShot,
   radar,
   reachable,
@@ -21,11 +22,13 @@ import {
   unitAt,
   visibleTiles,
   type GameState,
+  type DistrictBuilding,
   type Reach,
   type Scenario,
   type SurfaceTag,
   type Unit,
   type Vec,
+  type CoverKind,
 } from '../game/index.ts';
 import { completeMission, completeOffer, missionScenario, offerById, offerScenario, OFFER_INFLUENCE_GAIN, type MissionId } from '../game/strategy/missions.ts';
 import type { CampaignState } from '../game/strategy/types.ts';
@@ -91,7 +94,20 @@ const ATLANTIS_TILES: TileSpec = {
   wallOriginY: 0.227, wallHeight: 66, coverWidth: 40, coverHeight: 118, coverOriginY: 0.18, watery: true,
 };
 
-const CITY_PROPS = ['city-prop-tree', 'city-prop-tree2', 'city-prop-crate'];
+const CITY_PROP_KEYS: Record<Exclude<CoverKind, 'lamp'>, string[]> = {
+  tree: ['city-prop-tree', 'city-prop-tree2'],
+  crate: ['city-prop-crate'],
+};
+
+/** Three facade tints (neutral, warm brick, cool slate) over the shared wall art. */
+const FACADE_TINTS = [0xffffff, 0xd09a6a, 0x7f9bb5];
+/** Vertical lift in tile-widths for each extra building storey. */
+const STOREY_RISE = 0.5;
+/** Milliseconds per route tile for the player walk. */
+const WALK_MS = 110;
+/** Road centre-line and kerb colours (dark, warm-lit city palette). */
+const CENTRE_LINE_COLOR = 0xd8cfae;
+const KERB_COLOR = 0x9aa4b0;
 
 const UNIT_SPRITES = {
   soldier: { key: 'unit-soldier', feet: 0.988 },
@@ -136,6 +152,13 @@ export class BattleScene extends Phaser.Scene {
   private dragStart: { x: number; y: number; camX: number; camY: number } | null = null;
   private dragged = false;
 
+  // Player walk animation state (district moves only). While set, all input and
+  // camera panning is locked and the board holds its pre-move presentation.
+  private walkUnitId: string | null = null;
+  private walkSprite: Phaser.GameObjects.Container | null = null;
+  private walkImage: Phaser.GameObjects.Image | null = null;
+  private walkTween: Phaser.Tweens.Tween | null = null;
+
   constructor() {
     super('battle');
   }
@@ -144,6 +167,17 @@ export class BattleScene extends Phaser.Scene {
     this.missionId = data.missionId ?? null;
     this.offerId = data.offerId ?? null;
     this.returning = false;
+  }
+
+  /** Cancel any in-flight walk animation and its pending callback on scene shutdown. */
+  private cancelWalk(): void {
+    this.walkTween?.remove();
+    this.walkTween = null;
+    this.walkSprite?.destroy();
+    this.walkSprite = null;
+    this.walkImage = null;
+    this.walkUnitId = null;
+    this.busy = false;
   }
 
   preload(): void {
@@ -223,6 +257,9 @@ export class BattleScene extends Phaser.Scene {
       if (!this.missionId && !this.offerId && this.state.outcome !== 'playing') this.scene.restart();
     });
     this.hookPanKeys();
+
+    // Cancel any in-flight walk animation when the scene is torn down.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cancelWalk());
 
     this.autoSelect();
     this.redraw();
@@ -329,6 +366,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private onPointerDown(p: Phaser.Input.Pointer): void {
+    if (this.busy) return;
     if (this.isDistrict && p.x < RADAR_X + RADAR_W && p.y > RADAR_Y && p.x < PANEL_X) {
       this.panToRadar(p);
       return;
@@ -340,6 +378,7 @@ export class BattleScene extends Phaser.Scene {
 
   private onPointerMove(p: Phaser.Input.Pointer): void {
     this.tooltip.setVisible(false);
+    if (this.busy) return;
     if (this.dragStart && !this.dragged) {
       const dx = p.x - this.dragStart.x;
       const dy = p.y - this.dragStart.y;
@@ -553,13 +592,101 @@ export class BattleScene extends Phaser.Scene {
       }
       return;
     }
-    if (this.reach?.has(`${tile.x},${tile.y}`)) {
+    const reach = this.reach;
+    if (reach?.has(`${tile.x},${tile.y}`)) {
       const next = moveUnit(this.state, sel.id, tile);
       if (next !== this.state) {
-        this.setState(next);
-        this.afterAction();
+        if (this.isDistrict) this.animateMove(sel, next, tile, reach);
+        else {
+          this.setState(next);
+          this.afterAction();
+        }
       }
     }
+  }
+
+  /**
+   * Animate the player's district move: a single presentation of the soldier
+   * walking the pathTo route at ~110 ms/tile. The source board/fog presentation
+   * is held until the walk completes, then the authoritative state is published
+   * and `afterAction` runs exactly once.
+   */
+  private animateMove(unit: Unit, next: GameState, destination: Vec, reach: Reach): void {
+    const route = pathTo(reach, destination);
+    if (!route || route.length === 0) {
+      this.commitMove(next);
+      return;
+    }
+    this.busy = true;
+    this.walkUnitId = unit.id;
+    this.dragStart = null;
+    this.dragged = false;
+    this.tooltip.setVisible(false);
+
+    // Redraw the board without the moving unit (its static presentation is removed).
+    this.drawBoard();
+
+    const sprite = this.createWalkPresenter(unit);
+    this.walkSprite = sprite;
+    const start = this.tileScreen(unit.pos);
+    const positions = route.map((p) => this.tileScreen(p));
+
+    // Face the net direction of travel (optional; cheap).
+    if (this.walkImage) {
+      this.walkImage.setFlipX(positions[positions.length - 1]!.x < start.x);
+    }
+
+    this.walkTo(sprite, positions, () => this.commitMove(next));
+  }
+
+  /** Step the walk sprite through successive waypoints, then invoke onDone. */
+  private walkTo(sprite: Phaser.GameObjects.Container, positions: ScreenPoint[], onDone: () => void): void {
+    if (positions.length === 0) {
+      onDone();
+      return;
+    }
+    const target = positions[0]!;
+    this.walkTween = this.tweens.add({
+      targets: sprite,
+      x: target.x,
+      y: target.y,
+      duration: WALK_MS,
+      ease: 'Linear',
+      onComplete: () => this.walkTo(sprite, positions.slice(1), onDone),
+    });
+  }
+
+  /** Publish the authoritative post-move state and restore interactivity. */
+  private commitMove(next: GameState): void {
+    this.walkSprite?.destroy();
+    this.walkSprite = null;
+    this.walkImage = null;
+    this.walkTween = null;
+    this.walkUnitId = null;
+    this.busy = false;
+    this.setState(next);
+    this.afterAction();
+  }
+
+  /** A lightweight copy of the soldier (sprite + shadow) for the walk animation. */
+  private createWalkPresenter(unit: Unit): Phaser.GameObjects.Container {
+    const { tileW } = this.layout;
+    const centre = this.tileScreen(unit.pos);
+    const container = this.add.container(centre.x, centre.y);
+    // Draw above walls and roofs so the walker never disappears behind a building.
+    container.setDepth(tileDepth(unit.pos, 16));
+    const shadow = this.add.graphics();
+    shadow.fillStyle(COL.black, 0.45).fillEllipse(0, 5, tileW * 0.43, tileW * 0.17);
+    container.add(shadow);
+    const sprite = this.spriteFor(unit);
+    if (this.textures.exists(sprite.key)) {
+      const image = this.add.image(0, 0, sprite.key);
+      const height = tileW * 1.6;
+      image.setDisplaySize(height, height).setOrigin(0.5, sprite.feet);
+      container.add(image);
+      this.walkImage = image;
+    }
+    return container;
   }
 
   private afterAction(): void {
@@ -682,6 +809,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     this.drawDistrictFloors(grid, tileW, tileH);
+    this.drawRoadDressing(grid, tileW, tileH);
     this.drawObjectiveMarkers();
     this.drawReach();
     this.drawUnits();
@@ -752,6 +880,20 @@ export class BattleScene extends Phaser.Scene {
     this.drawRoofs(grid, tileW, tileH);
     const buildings = this.state.district?.buildings ?? [];
 
+    // Wall tile -> its building, for facade/height lookup.
+    const wallOf = new Map<string, DistrictBuilding>();
+    for (const b of buildings) {
+      for (let y = b.y; y < b.y + b.h; y++) {
+        for (let x = b.x; x < b.x + b.w; x++) {
+          if (x === b.x || x === b.x + b.w - 1 || y === b.y || y === b.y + b.h - 1) wallOf.set(`${x},${y}`, b);
+        }
+      }
+    }
+
+    // Cover tile -> prop kind, from the cosmetic metadata.
+    const propKind = new Map<string, CoverKind>();
+    for (const prop of this.state.district?.props ?? []) propKind.set(`${prop.pos.x},${prop.pos.y}`, prop.kind);
+
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
         const point = { x, y };
@@ -764,15 +906,19 @@ export class BattleScene extends Phaser.Scene {
         const visibleHere = this.isVisible(point);
         if (kind === 'wall') {
           if (this.isDoorway(point, buildings)) continue; // doorway, not wall
-          const wall = this.track(this.add.image(centre.x, centre.y, this.textureFor('city-wall', 'iso-wall')));
-          wall.setDisplaySize(tileW, tileW).setOrigin(0.5, 0.25).setDepth(tileDepth(point, 8));
-          if (!visibleHere) wall.setTint(shade(0xffffff, FOG_DIM));
+          this.drawWallStack(point, centre, tileW, visibleHere, wallOf.get(`${x},${y}`));
         } else {
-          // Cover prop, deterministic per tile.
-          const prop = CITY_PROPS[(x * 7 + y * 13) % CITY_PROPS.length]!;
-          const cover = this.track(this.add.image(centre.x, centre.y, this.textureFor(prop, 'iso-cover')));
-          cover.setDisplaySize(tileW * 0.55, tileW * 0.72).setOrigin(0.5, 1).setDepth(tileDepth(point, 7));
-          if (!visibleHere) cover.setTint(shade(0xffffff, FOG_DIM));
+          // Cover prop, dressed per cosmetic metadata.
+          const kindName = propKind.get(`${x},${y}`) ?? 'crate';
+          if (kindName === 'lamp') {
+            this.drawLamp(point, centre, tileW, visibleHere);
+          } else {
+            const keys = CITY_PROP_KEYS[kindName];
+            const keyName = keys[(x + y) % keys.length]!;
+            const cover = this.track(this.add.image(centre.x, centre.y, this.textureFor(keyName, 'iso-cover')));
+            cover.setDisplaySize(tileW * 0.72, tileW * 0.85).setOrigin(0.5, 1).setDepth(tileDepth(point, 7));
+            if (!visibleHere) cover.setTint(shade(0xffffff, FOG_DIM));
+          }
         }
       }
     }
@@ -788,14 +934,105 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** One facade-tinted wall level per storey, stacked upward. */
+  private drawWallStack(point: Vec, centre: ScreenPoint, tileW: number, visibleHere: boolean, building: DistrictBuilding | undefined): void {
+    const storeys = building?.storeys ?? 1;
+    const facade = building?.facade ?? 0;
+    const tint = FACADE_TINTS[facade] ?? 0xffffff;
+    const wallTex = this.textureFor('city-wall', 'iso-wall');
+    for (let k = 0; k < storeys; k++) {
+      const wall = this.track(this.add.image(centre.x, centre.y - k * tileW * STOREY_RISE, wallTex));
+      wall.setDisplaySize(tileW, tileW).setOrigin(0.5, 0.25).setDepth(tileDepth(point, 8 + k * 0.5));
+      if (tint !== 0xffffff) wall.setTint(tint);
+      if (!visibleHere) wall.setTint(shade(0xffffff, FOG_DIM));
+    }
+  }
+
+  /** A renderer-drawn lamp: a thin pole with a glowing head, anchored to the tile. */
+  private drawLamp(point: Vec, centre: ScreenPoint, tileW: number, visibleHere: boolean): void {
+    const lamp = this.track(this.add.graphics());
+    const glowDim = visibleHere ? 1 : FOG_DIM;
+    // Pole.
+    lamp.fillStyle(0x2b313a, 1).fillRect(centre.x - 1.5, centre.y - tileW * 0.62, 3, tileW * 0.62);
+    // Head arm + lamp.
+    lamp.fillStyle(0x2b313a, 1).fillRect(centre.x - 4, centre.y - tileW * 0.66, 8, 4);
+    lamp.fillStyle(0xf0c14b, 0.95 * glowDim).fillCircle(centre.x, centre.y - tileW * 0.66, 4);
+    lamp.fillStyle(0xf6e6a8, 0.32 * glowDim).fillCircle(centre.x, centre.y - tileW * 0.66, 9);
+    lamp.setDepth(tileDepth(point, 7));
+  }
+
   private isDoorway(point: Vec, buildings: ReadonlyArray<{ doorways: Vec[] }>): boolean {
     return buildings.some((b) => b.doorways.some((d) => d.x === point.x && d.y === point.y));
+  }
+
+  /**
+   * Road dressing: dashed centre lines along straight road runs and contrasting
+   * kerbs only where road meets pavement. Junctions get no centre line; kerbs are
+   * drawn once per boundary (from the road side), never repeated around pavement.
+   */
+  private drawRoadDressing(grid: GameState['grid'], tileW: number, tileH: number): void {
+    if (!this.state.district) return;
+    const { width, height } = grid;
+    const inGrid = (q: Vec) => q.x >= 0 && q.y >= 0 && q.x < width && q.y < height;
+    const isRoad = (q: Vec) => inGrid(q) && this.surfaceAt(q) === 'road';
+    const isPavement = (q: Vec) => inGrid(q) && this.surfaceAt(q) === 'pavement';
+
+    const lines = this.track(this.add.graphics()).setDepth(1);
+    const kerbs = this.track(this.add.graphics()).setDepth(1);
+
+    const edge = (g: Phaser.GameObjects.Graphics, colour: number, ax: number, ay: number, bx: number, by: number, alpha: number) => {
+      g.lineStyle(2, colour, alpha);
+      g.beginPath();
+      g.moveTo(ax, ay);
+      g.lineTo(bx, by);
+      g.strokePath();
+    };
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const point = { x, y };
+        if (this.surfaceAt(point) !== 'road') continue;
+        if (!this.isExplored(point)) continue;
+        const c = this.tileScreen(point);
+        if (this.offScreen(c)) continue;
+        const alpha = this.isVisible(point) ? 1 : FOG_DIM;
+
+        const north = isRoad({ x, y: y - 1 });
+        const south = isRoad({ x, y: y + 1 });
+        const east = isRoad({ x: x + 1, y });
+        const west = isRoad({ x: x - 1, y });
+        // A straight run follows one axis only; a junction follows both.
+        const alongX = (east || west) && !north && !south;
+        const alongY = (north || south) && !east && !west;
+
+        if (alongX || alongY) {
+          // Screen direction one road step takes (E-W runs along +x, N-S along +y).
+          const dx = alongX ? tileW / 2 : -tileW / 2;
+          const dy = tileH / 2;
+          const len = Math.hypot(dx, dy);
+          const d = tileW * 0.27;
+          const parity = alongX ? x : y;
+          if (parity % 2 === 0) {
+            const nx = (dx / len) * d;
+            const ny = (dy / len) * d;
+            edge(lines, CENTRE_LINE_COLOR, c.x - nx, c.y - ny, c.x + nx, c.y + ny, alpha * 0.9);
+          }
+        }
+
+        // Kerbs on the road side of each road/pavement boundary edge.
+        if (isPavement({ x: x + 1, y })) edge(kerbs, KERB_COLOR, c.x + tileW / 2, c.y, c.x, c.y + tileH / 2, alpha * 0.9);
+        if (isPavement({ x: x - 1, y })) edge(kerbs, KERB_COLOR, c.x - tileW / 2, c.y, c.x, c.y - tileH / 2, alpha * 0.9);
+        if (isPavement({ x, y: y + 1 })) edge(kerbs, KERB_COLOR, c.x, c.y + tileH / 2, c.x - tileW / 2, c.y, alpha * 0.9);
+        if (isPavement({ x, y: y - 1 })) edge(kerbs, KERB_COLOR, c.x, c.y - tileH / 2, c.x + tileW / 2, c.y, alpha * 0.9);
+      }
+    }
   }
 
   /** One translucent roof top face per building (the cut-away X-COM look). */
   private drawRoofs(grid: GameState['grid'], tileW: number, tileH: number): void {
     const buildings = this.state.district?.buildings ?? [];
     for (const b of buildings) {
+      const lift = (b.storeys - 1) * tileW * STOREY_RISE;
       for (let y = b.y + 1; y < b.y + b.h - 1; y++) {
         for (let x = b.x + 1; x < b.x + b.w - 1; x++) {
           const point = { x, y };
@@ -803,7 +1040,7 @@ export class BattleScene extends Phaser.Scene {
           if (!this.isExplored(point)) continue;
           const centre = this.tileScreen(point);
           if (this.offScreen(centre)) continue;
-          const raised = { ...centre, y: centre.y - tileW * 0.45 };
+          const raised = { ...centre, y: centre.y - tileW * 0.45 - lift };
           const roof = this.track(this.add.image(raised.x, raised.y, this.textureFor('city-roof', 'iso-wall')));
           roof.setDisplaySize(tileW, tileH).setOrigin(0.5).setAlpha(0.34).setDepth(tileDepth(point, 12));
           if (!this.isVisible(point)) roof.setTint(shade(0xffffff, FOG_DIM));
@@ -850,6 +1087,7 @@ export class BattleScene extends Phaser.Scene {
   private drawUnits(): void {
     for (const unit of this.state.units) {
       if (!unit.alive) continue;
+      if (unit.id === this.walkUnitId) continue; // rendered as the animated walker
       if (unit.team === 'squad') {
         this.drawUnit(unit);
         continue;
