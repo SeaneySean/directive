@@ -1,5 +1,4 @@
 import { REGIONS } from './data.ts';
-import { generateOffers } from './missions.ts';
 import { freshRoster } from './roster.ts';
 import type { CampaignState, MissionOffer, MissionProgress, RegionState, Soldier } from './types.ts';
 
@@ -40,14 +39,27 @@ function isMissions(value: unknown): value is CampaignState['missions'] {
   return isRecord(value) && Object.values(value).every(isMissionProgress);
 }
 
+/** A strictly positive integer (turn indices: spawnTurn, expiresTurn). */
+function isPositiveInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 function isOffer(value: unknown): value is MissionOffer {
   if (!isRecord(value)) return false;
-  return typeof value.id === 'string'
-    && typeof value.regionId === 'string'
-    && ['recover', 'assassinate', 'clash'].includes(String(value.type))
-    && ['subvert', 'force', 'enlighten'].includes(String(value.path))
-    && isNumber(value.seed)
-    && ['open', 'launched', 'won', 'lost'].includes(String(value.status));
+  if (typeof value.id !== 'string' || typeof value.regionId !== 'string') return false;
+  if (!['recover', 'assassinate', 'clash'].includes(String(value.type))) return false;
+  if (!['subvert', 'force', 'enlighten'].includes(String(value.path))) return false;
+  if (!isNumber(value.seed)) return false;
+  if (!['open', 'launched', 'won', 'lost'].includes(String(value.status))) return false;
+  // Expiry fields arrive together: positive integers on new offers, absent on
+  // legacy offers (which are normalised separately). A mismatch is malformed.
+  const hasSpawn = value.spawnTurn !== undefined;
+  const hasExpires = value.expiresTurn !== undefined;
+  if (hasSpawn !== hasExpires) return false;
+  if (hasSpawn && hasExpires) {
+    if (!isPositiveInt(value.spawnTurn) || !isPositiveInt(value.expiresTurn)) return false;
+  }
+  return true;
 }
 
 function isRegion(value: unknown, index: number): value is RegionState {
@@ -134,13 +146,34 @@ function migrateFromV2(campaign: CampaignState): CampaignState {
   return { ...campaign, roster: freshRoster(), recruitCount: 0 };
 }
 
-/** A version-1 save predates offers and spent agents too; backfill both, then the roster. */
+/** A version-1 save predates offers and spent agents too; start with no offers, then the roster. */
 function migrateFromV1(campaign: CampaignState): CampaignState {
   return migrateFromV2({
     ...campaign,
-    offers: generateOffers(campaign),
+    offers: [],
     spentMissionAgents: 0,
   });
+}
+
+/**
+ * Normalise legacy offers that predate expiry: discard their open offers,
+ * preserve launched/won/lost records, and give those records a fresh expiry
+ * (`campaign.turn + 3`). New-format offers (with expiry already set) pass
+ * through untouched, so current-version round-trips never reroll.
+ */
+function normalizeOffers(campaign: CampaignState): CampaignState {
+  let changed = false;
+  const offers: MissionOffer[] = [];
+  for (const offer of campaign.offers) {
+    if (offer.spawnTurn !== undefined && offer.expiresTurn !== undefined) {
+      offers.push(offer);
+      continue;
+    }
+    changed = true;
+    if (offer.status === 'open') continue;
+    offers.push({ ...offer, spawnTurn: campaign.turn, expiresTurn: campaign.turn + 3 });
+  }
+  return changed ? { ...campaign, offers } : campaign;
 }
 
 export function serializeCampaign(campaign: CampaignState): string {
@@ -155,11 +188,11 @@ export function deserializeCampaign(raw: string | null): CampaignState | null {
     if (!isRecord(envelope) || typeof envelope.version !== 'number') return null;
     if (envelope.version === SAVE_VERSION) {
       if (!isCampaignState(envelope.campaign)) return null;
-      return structuredClone(envelope.campaign);
+      return normalizeOffers(structuredClone(envelope.campaign));
     }
     if (envelope.version === 2) {
       if (!isCampaignStateV2(envelope.campaign)) return null;
-      return migrateFromV2(structuredClone(envelope.campaign));
+      return normalizeOffers(migrateFromV2(structuredClone(envelope.campaign)));
     }
     if (envelope.version === 1) {
       if (!isCampaignStateCore(envelope.campaign)) return null;

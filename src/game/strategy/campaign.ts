@@ -1,7 +1,7 @@
 import { nextRandom } from '../rng.ts';
 import { ACTIONS, REGIONS, STARTING_TREASURY } from './data.ts';
 import { pendingEvent } from './events.ts';
-import { generateOffers } from './missions.ts';
+import { expireOffers, spawnOffers } from './missions.ts';
 import { advanceResearch } from './research.ts';
 import { freshRoster } from './roster.ts';
 import { PATHS } from './types.ts';
@@ -47,7 +47,7 @@ export function createCampaign(seed: number): CampaignState {
     outcome: 'playing',
     endingId: null,
   };
-  return { ...base, offers: generateOffers(base) };
+  return { ...base, offers: [] };
 }
 
 export function isActionAvailable(
@@ -140,24 +140,29 @@ export function endTurn(state: CampaignState): CampaignState {
   });
 
   const held = regions.filter((region) => region.held);
+  const resultingTurn = state.turn + 1;
+  // Missions spawn from the outgoing turn's acted regions. Expire old offers
+  // first, then visit eligible acted regions against the resulting region state.
+  const survivors = expireOffers(state.offers, resultingTurn);
+  const spawned = spawnOffers(resultingTurn, seed, regions, state.assignments, survivors);
+
   const advanced: CampaignState = {
     ...state,
-    seed,
-    turn: state.turn + 1,
+    seed: spawned.seed,
+    turn: resultingTurn,
     treasury: state.treasury + held.reduce((sum, region) => sum + region.wealth, 0),
     exposure,
     agents: 3 + Math.floor(held.length / 2) + state.bonusAgents,
     regions,
     assignments: {},
-    offers: [],
+    offers: spawned.offers,
     spentMissionAgents: 0,
     roster: state.roster.map((soldier) =>
       soldier.alive ? { ...soldier, hp: Math.min(soldier.maxHp, soldier.hp + 3) } : soldier,
     ),
     outcome: 'playing',
   };
-  const withOffers: CampaignState = { ...advanced, offers: generateOffers(advanced) };
-  const researched = advanceResearch(withOffers);
+  const researched = advanceResearch(advanced);
   const withAgents = {
     ...researched,
     agents: researched.agents + (researched.completedResearch.includes('cybernetics-2') ? 1 : 0),

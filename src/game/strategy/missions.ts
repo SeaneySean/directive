@@ -1,9 +1,11 @@
 import { AREA51_HANGAR, ATLANTIS_RUINS } from '../scenarios.ts';
 import { generateMission } from '../mapgen.ts';
+import { nextRandom } from '../rng.ts';
 import type { GameState, MissionType, Outcome, Scenario } from '../types.ts';
 import { checkOutcome } from './outcome.ts';
 import { hasResearchGrant } from './research.ts';
 import { pendingEvent } from './events.ts';
+import { ACTIONS } from './data.ts';
 import { buildFieldSquad, livingSoldiers, RECRUIT_COST, RECRUIT_NAMES, settleRoster } from './roster.ts';
 import { PATHS } from './types.ts';
 import type {
@@ -98,9 +100,7 @@ export function missionScenario(state: CampaignState, id: MissionId): Scenario {
   };
 }
 
-// --- Generated per-region mission offers (criterion 3) ---
-
-const OFFER_TYPES: readonly MissionType[] = ['recover', 'assassinate', 'clash'];
+// --- Generated mission offers that spawn from acted regions ---
 
 export const OFFER_INFLUENCE_GAIN = 35;
 export const OFFER_RESISTANCE_DELTA = -5;
@@ -113,16 +113,16 @@ export const OFFER_EXPOSURE: Record<MissionType, number> = {
   clash: 2,
 };
 
-const clamp = (value: number): number => Math.max(0, Math.min(100, value));
+/** An eligible acted region spawns a mission when its roll falls below this. */
+export const SPAWN_CHANCE = 0.45;
+/** The most open generated offers at once (story missions are not counted). */
+export const OPEN_OFFER_CAP = 2;
+/** An offer is available for this many turns: spawnTurn .. expiresTurn - 1. */
+export const OFFER_LIFETIME = 3;
+/** A Subvert action yields assassination (rather than recover) below this roll. */
+export const SUBVERT_ASSASSINATE_THRESHOLD = 0.225;
 
-/** The offer's path is the region's highest meter, ties broken in PATHS order. */
-export function offerPath(region: RegionState): InfluencePath {
-  let best: InfluencePath = PATHS[0];
-  for (const path of PATHS.slice(1)) {
-    if (region.meters[path] > region.meters[best]) best = path;
-  }
-  return best;
-}
+const clamp = (value: number): number => Math.max(0, Math.min(100, value));
 
 /** Deterministic 32-bit seed from the offer's (region, turn, type) identity. */
 function offerSeed(regionId: string, turn: number, type: MissionType): number {
@@ -134,19 +134,132 @@ function offerSeed(regionId: string, turn: number, type: MissionType): number {
   return hash >>> 0;
 }
 
-/** One frozen offer per region for the current turn, cyclic type per region index. */
-export function generateOffers(state: CampaignState): MissionOffer[] {
-  return state.regions.map((region, index) => {
-    const type = OFFER_TYPES[(index + state.turn) % OFFER_TYPES.length]!;
-    return {
-      id: `${region.id}:${state.turn}`,
-      regionId: region.id,
-      type,
-      path: offerPath(region),
-      seed: offerSeed(region.id, state.turn, type),
-      status: 'open' as const,
-    };
+/** The turn on which an offer spawned on `spawnTurn` expires. */
+export function offerExpiresTurn(spawnTurn: number): number {
+  return spawnTurn + OFFER_LIFETIME;
+}
+
+/**
+ * The mission type an offer takes from its assigned action's primary path.
+ * Subvert is assassination `below` `SUBVERT_ASSASSINATE_THRESHOLD`, otherwise
+ * recover; Force is always clash; Enlighten is always recover. No extra roll.
+ */
+export function offerTypeForPath(path: InfluencePath, rollValue: number): MissionType {
+  switch (path) {
+    case 'subvert':
+      return rollValue < SUBVERT_ASSASSINATE_THRESHOLD ? 'assassinate' : 'recover';
+    case 'force':
+      return 'clash';
+    case 'enlighten':
+      return 'recover';
+  }
+}
+
+/** A freshly spawned, frozen open offer. */
+function makeOffer(regionId: string, turn: number, type: MissionType, path: InfluencePath): MissionOffer {
+  return {
+    id: `${regionId}:${turn}`,
+    regionId,
+    type,
+    path,
+    seed: offerSeed(regionId, turn, type),
+    status: 'open',
+    spawnTurn: turn,
+    expiresTurn: offerExpiresTurn(turn),
+  };
+}
+
+/**
+ * Expire open offers at an END TURN transition: drop any open offer whose
+ * `expiresTurn <= resultingTurn`, prune terminal won/lost records, and always
+ * retain launched offers (which settle exactly once into won/lost).
+ */
+export function expireOffers(offers: readonly MissionOffer[], resultingTurn: number): MissionOffer[] {
+  return offers.filter((offer) => {
+    if (offer.status === 'won' || offer.status === 'lost') return false;
+    if (offer.status === 'launched') return true;
+    return offer.expiresTurn > resultingTurn;
   });
+}
+
+export interface OfferSpawnResult {
+  offers: MissionOffer[];
+  seed: number;
+}
+
+/**
+ * Visit eligible acted regions in `REGIONS` order (the `regions` array), rolling
+ * `nextRandom` once per eligible region and spawning when the value is below
+ * `SPAWN_CHANCE`. Held regions, regions already holding an open offer and the
+ * two-open-offer cap are all skipped (the cap stops further visitation). New
+ * offers append to the surviving offers; survivors are never regenerated.
+ *
+ * The pressure fallback (criterion 3) runs when the outgoing turn had no
+ * assignments and no generated offer remains open: it spawns one clash with a
+ * frozen Force path in the unheld region with the highest resulting Force meter
+ * (ties broken in `REGIONS` order), using no random roll.
+ */
+export function spawnOffers(
+  resultingTurn: number,
+  seed: number,
+  regions: readonly RegionState[],
+  assignments: Record<string, string>,
+  survivingOffers: readonly MissionOffer[],
+): OfferSpawnResult {
+  let currentSeed = seed;
+  let offers = [...survivingOffers];
+  let open = offers.filter((offer) => offer.status === 'open').length;
+
+  for (const region of regions) {
+    if (open >= OPEN_OFFER_CAP) break;
+    const actionId = assignments[region.id];
+    if (!actionId) continue;
+    if (region.held) continue;
+    if (offers.some((offer) => offer.regionId === region.id && offer.status === 'open')) continue;
+
+    const roll = nextRandom(currentSeed);
+    currentSeed = roll.seed;
+    if (roll.value >= SPAWN_CHANCE) continue;
+
+    const path: InfluencePath = ACTIONS[actionId]?.path ?? 'subvert';
+    const type = offerTypeForPath(path, roll.value);
+    offers = [...offers, makeOffer(region.id, resultingTurn, type, path)];
+    open += 1;
+  }
+
+  if (Object.keys(assignments).length === 0 && open === 0) {
+    const eligible = regions.filter((region) => !region.held);
+    let target = eligible[0];
+    for (const region of eligible.slice(1)) {
+      if (region.meters.force > (target?.meters.force ?? -1)) target = region;
+    }
+    if (target) offers = [...offers, makeOffer(target.id, resultingTurn, 'clash', 'force')];
+  }
+
+  return { offers, seed: currentSeed };
+}
+
+export interface OfferTransition {
+  spawned: MissionOffer[];
+  expired: { regionId: string; regionName: string }[];
+}
+
+/**
+ * The feedback difference across an END TURN transition: offers that newly
+ * surfaced and open offers that expired. Derived from before/after state so no
+ * persistent campaign log is needed.
+ */
+export function offerTransition(before: CampaignState, after: CampaignState): OfferTransition {
+  const beforeIds = new Set(before.offers.map((offer) => offer.id));
+  const afterIds = new Set(after.offers.map((offer) => offer.id));
+  const spawned = after.offers.filter((offer) => offer.status === 'open' && !beforeIds.has(offer.id));
+  const expired = before.offers
+    .filter((offer) => offer.status === 'open' && !afterIds.has(offer.id))
+    .map((offer) => ({
+      regionId: offer.regionId,
+      regionName: before.regions.find((region) => region.id === offer.regionId)?.name ?? offer.regionId,
+    }));
+  return { spawned, expired };
 }
 
 export function offerById(state: CampaignState, id: string): MissionOffer | undefined {
