@@ -76,6 +76,33 @@ function pickDistinct(pool: Vec[], n: number, randInt: (bound: number) => number
   return out;
 }
 
+/**
+ * A contiguous (adjacent-x) run of `run` tiles from an x-ascending row, nearest
+ * `centreX`. Deterministic: ties resolved toward the smaller x. The squad spawns
+ * as one such run so the opening view is centred and no soldier starts off-screen.
+ */
+function closestRunOf(sortedRow: Vec[], run: number, centreX: number): Vec[] {
+  let bestStart = -1;
+  let bestDist = Infinity;
+  for (let s = 0; s + run <= sortedRow.length; s++) {
+    let contiguous = true;
+    for (let i = 1; i < run; i++) {
+      if (sortedRow[s + i]!.x !== sortedRow[s + i - 1]!.x + 1) {
+        contiguous = false;
+        break;
+      }
+    }
+    if (!contiguous) continue;
+    const midX = (sortedRow[s]!.x + sortedRow[s + run - 1]!.x) / 2;
+    const dist = Math.abs(midX - centreX);
+    if (dist < bestDist || (dist === bestDist && sortedRow[s]!.x < sortedRow[bestStart]!.x)) {
+      bestDist = dist;
+      bestStart = s;
+    }
+  }
+  return bestStart < 0 ? [] : sortedRow.slice(bestStart, bestStart + run);
+}
+
 /** Road lanes at `spacing` intervals, plus both borders. Always 1-tile roads, never adjacent to a border. */
 function roadLines(limit: number, spacing: number): number[] {
   const lines = new Set<number>([0, limit - 1]);
@@ -233,15 +260,16 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
   const reserved = new Set<string>();
   const reserve = (p: Vec) => reserved.add(keyOf(p));
 
-  // 3. Squad spawns on the near-edge pavement, around the horizontal centre.
+  // 3. Squad spawns on the near-edge pavement as a contiguous run of four tiles
+  // nearest the horizontal centre (behind-props intent: cover is still stamped one
+  // row north per spawn below).
   const squadY = rows[rows.length - 1]! - 1; // sidewalk just inside the south road
-  const squadPool = floorsOf((p) => p.y === squadY && srf[p.y]![p.x] === 'pavement');
+  const squadPool = [...floorsOf((p) => p.y === squadY && srf[p.y]![p.x] === 'pavement')].sort((a, b) => a.x - b.x);
   const cx = Math.floor(width / 2);
-  const squadPositions = pickDistinct(
-    [...squadPool].sort((a, b) => Math.abs(a.x - cx) - Math.abs(b.x - cx) || a.x - b.x),
-    4,
-    randInt,
-  );
+  // A contiguous run of four pavement tiles nearest the centre. Drawn via
+  // pickDistinct over the run (not the whole pool) so the four RNG rolls are
+  // still consumed and every downstream placement stays byte-identical.
+  const squadPositions = pickDistinct(closestRunOf(squadPool, 4, cx), 4, randInt);
   if (squadPositions.length < 4) throw new Error(`no room for squad spawns (seed ${seed})`);
   for (const p of squadPositions) reserve(p);
 
