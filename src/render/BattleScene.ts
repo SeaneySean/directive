@@ -106,6 +106,8 @@ export class BattleScene extends Phaser.Scene {
   private missionId: MissionId | null = null;
   private offerId: string | null = null;
   private boardObjects: Phaser.GameObjects.GameObject[] = [];
+  /** HUD portrait cards, kept separate from the board so camera pans don't clear them. */
+  private portraitObjects: Phaser.GameObjects.GameObject[] = [];
   private panel!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
   private tooltip!: Phaser.GameObjects.Text;
@@ -1158,6 +1160,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawPortraitCards(): void {
+    for (const object of this.portraitObjects) object.destroy();
+    this.portraitObjects = [];
     const squad = this.state.units.filter((unit) => unit.team === 'squad');
     const cards: Phaser.GameObjects.GameObject[] = [];
     squad.forEach((unit, index) => {
@@ -1199,6 +1203,6 @@ export class BattleScene extends Phaser.Scene {
       const apLabel = this.add.text(PANEL_X + 214, y + 56, `${unit.ap} AP`, textStyle(11, HEX.goldPale)).setOrigin(0, 0.5).setDepth(9012);
       cards.push(apBg, ap, apLabel);
     });
-    this.boardObjects.push(...cards);
+    this.portraitObjects = cards;
   }
 }
