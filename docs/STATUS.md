@@ -28,8 +28,8 @@ Last updated: 26 Sep 2026, night. Three days left. Deadline: 30 Sep 2026.
    `cd ~/games/illuminatus-play && bun run dev` (the copy is already on the new build).
    Watch for: guards now stay by their cover; from round 4 the alarm brings extra guards at
    the far wall; camping no longer wins. Atlantis unlocks from the Mythology research route.
-2. Still outstanding from earlier: `gh auth refresh -h github.com -s workflow` so the Pages
-   deploy can go live; the judges need a link.
+2. **Live link is up:** https://seaneysean.github.io/directive/ (deploys automatically on
+   every push to master). Done 26 Sep.
 
 ## Things worth knowing
 
