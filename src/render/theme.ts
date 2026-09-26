@@ -79,6 +79,8 @@ export const COL = {
   empty: 0x090c10,
   hintBg: 0x2b2413,
   dimTint: 0x666666,
+  faint: 0x596575,
+  textDim: 0xaeb9c7,
   waterDeep: 0x0a2b33,
   water: 0x0e3a44,
   floor: 0x596473,
