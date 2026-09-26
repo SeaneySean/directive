@@ -139,6 +139,14 @@ Cut order if late: Atlantis becomes a second map on the Area 51 tileset; events 
 2. Reserve space so offer text cannot run under LAUNCH.
 3. Objective-specific victory banners: TARGET DOWN, ITEM EXTRACTED.
 4. Debrief: fold the old casualties/survivors summary into the per-soldier list.
+5. (7e/7f) Units on the road directly north of a three-storey building draw over its roof and
+   read as standing on it. Fix depth order without breaking visible-interior selection or
+   hidden-unit safety (Athena, 27 Sep).
+6. (7e) Retake docs/screens/7e/01–04 through the real flow; they were hook-driven.
+7. (7f, optional) Real multi-storey facade art and a tree prop that reads as a tree; the
+   Kenney wedge is accepted for the cut.
+8. Wire the second art batch: briefing-{recover,assassinate,clash}.jpg, portraits for
+   guard/guardian/operative/target, units/operative.png, ui/mission-glyph.png, ui/world-alert.png.
 
 ## Balance notes for slice 6
 
@@ -181,5 +189,5 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | merged 26 Sep |
 | 7e-rules | Fog of war, enemy memory, radar data, district generator, fog-aware squad AI (opt-in until the renderer lands) | worker → critic | merged 26 Sep |
 | 7e-render | Camera, fog rendering, radar panel, city tileset, campaign activation | merged 26 Sep | one send-back: squad spawns clustered; 00-start-fog.png retaken by the critic through the real flow, the other 7e shots were hook-driven and belong to the 7d retake list |
-| 7f-dressing | Building heights and facades, road markings and kerbs, lamp/tree/crate props, player walk tween (Sean 26 Sep: "it's the look", "they jump") | worker | building |
+| 7f-dressing | Building heights and facades, road markings and kerbs, lamp/tree/crate props, player walk tween (Sean 26 Sep: "it's the look", "they jump") | merged 27 Sep | Athena waived the Atlantis browser smoke; evidence in docs/screens/7f |
 | 7d | Polish, Loom, Skool post | conductor | last |

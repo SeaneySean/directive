@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 26 Sep 2026, night. Three days left. Deadline: 30 Sep 2026.
+Last updated: 27 Sep 2026, early hours. Three days left. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -16,7 +16,7 @@ Last updated: 26 Sep 2026, night. Three days left. Deadline: 30 Sep 2026.
 | 7b | Persistent squad: HP and kills carry over, promotion at 5 kills, deaths cost 40 to replace | merged |
 | 7a-spawn | Missions spawn from your actions, one or two open at a time, sidebar tabs, map clear | merged; PLAY THIS |
 | 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | **merged 26 Sep late; PLAY THIS.** Generated missions are now real levels: district maps with buildings, fog of war, radar bottom-left, scrolling camera (drag, edge, WASD). Sent back once because the squad spawned scattered along the start edge; fixed |
-| 7f | Your 26 Sep playtest ("it's the look", "they jump"): building heights and facades, road markings, kerbs, lamps and trees, soldiers walk their path instead of teleporting | building overnight; must merge by end of 27 Sep |
+| 7f | Your 26 Sep playtest ("it's the look", "they jump"): building heights and facades, road markings, kerbs, lamps and trees, soldiers walk their path instead of teleporting | **merged 27 Sep; PLAY THIS.** Buildings now come in 1 to 3 storeys and three facades, roads have centre lines and kerbs, cover is lamps, trees and crates, and your soldiers walk their route instead of teleporting. Enemy moves still jump (cut for time) |
 | 7d | Polish, art batch wiring, Loom, Skool post | 28–29 Sep |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
 
