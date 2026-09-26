@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { endTurn, moveUnit, shoot, unitById } from './state.ts';
 import { createGame } from './state.ts';
-import { hasFog, isKnownEnemy, knownEnemies, refreshMemory, visibleTiles } from './visibility.ts';
+import { previewShot } from './combat.ts';
+import { hasFog, isKnownEnemy, knownEnemies, refreshMemory, squadShotPreview, visibleTiles } from './visibility.ts';
 import type { DistrictMetadata, Scenario, Unit } from './types.ts';
 
 const squadAt = (id: string, x: number, y: number): Unit => ({
@@ -153,5 +154,38 @@ describe('fog-gated shooting', () => {
     const state = createGame(scenario(rows, [squadAt('s1', 5, 5), alienAt('a1', 7, 5)], district));
     expect(isKnownEnemy(state, unitById(state, 'a1'))).toBe(true);
     expect(shoot(state, 's1', 'a1')).not.toBeNull();
+  });
+});
+
+describe('squadShotPreview', () => {
+  const district: DistrictMetadata = { surfaces: [], buildings: [], searchMarker: { x: 0, y: 0 } };
+
+  test('returns null for a hidden target on a fog map', () => {
+    const rows = openRows(24, 24);
+    const state = createGame(scenario(rows, [squadAt('s1', 3, 3), alienAt('a1', 20, 20)], district));
+    const attacker = unitById(state, 's1');
+    const target = unitById(state, 'a1');
+    expect(squadShotPreview(state, attacker, target)).toBeNull();
+  });
+
+  test('returns the normal preview for a visible target on a fog map', () => {
+    const rows = openRows(24, 24);
+    const state = createGame(scenario(rows, [squadAt('s1', 5, 5), alienAt('a1', 7, 5)], district));
+    const attacker = unitById(state, 's1');
+    const target = unitById(state, 'a1');
+    expect(squadShotPreview(state, attacker, target)).toEqual(previewShot(state.grid, attacker, target));
+  });
+
+  test('passes through unconditionally on a no-fog scenario', () => {
+    // Chebyshev 8 from the squad: outside fog visibility (7) but within the
+    // squad's 8-tile weapon range, so the plain geometry preview is legal.
+    const rows = openRows(24, 24);
+    const state = createGame(scenario(rows, [squadAt('s1', 2, 2), alienAt('a1', 10, 2)]));
+    const attacker = unitById(state, 's1');
+    const target = unitById(state, 'a1');
+    expect(hasFog(state)).toBe(false);
+    const preview = previewShot(state.grid, attacker, target);
+    expect(preview).not.toBeNull();
+    expect(squadShotPreview(state, attacker, target)).toEqual(preview);
   });
 });

@@ -2,6 +2,8 @@
 
 import { hasLineOfSight } from './los.ts';
 import { inBounds, key } from './map.ts';
+import type { ShotPreview } from './combat.ts';
+import { previewShot } from './combat.ts';
 import type { GameState, Unit, Vec } from './types.ts';
 
 /** Chebyshev radius a living squad unit can see (walls block, cover does not). */
@@ -51,6 +53,18 @@ export function knownEnemies(state: GameState): Unit[] {
 export function isKnownEnemy(state: GameState, unit: Unit): boolean {
   if (unit.team !== 'alien' || !unit.alive) return false;
   return visibleTiles(state).has(key(unit.pos));
+}
+
+/**
+ * State-aware squad shot preview. Combines `previewShot`'s geometry/combat API
+ * with fog: a squad attacker may only shoot an enemy it can currently see, so a
+ * hidden target returns null while a visible target falls through to the normal
+ * preview. Hand-authored (no-fog) scenarios pass through unconditionally, and
+ * enemy attackers are never visibility-gated.
+ */
+export function squadShotPreview(state: GameState, attacker: Unit, target: Unit): ShotPreview | null {
+  if (attacker.team === 'squad' && hasFog(state) && !isKnownEnemy(state, target)) return null;
+  return previewShot(state.grid, attacker, target);
 }
 
 /**
