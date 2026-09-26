@@ -26,3 +26,7 @@ camera centred on the selected unit.
   wedge more than a tree) and crate; a second crate dimmed in fog.
 - 12–14 story mission Area 51 Hangar through its real unlock (The Leak event on turn 3):
   renders, instant move works (Cole AP 1/2), END TURN reaches round 2. No console errors.
+
+Conductor waiver (Athena, 27 Sep): the Atlantis Ruins story mission was not browser-smoked
+for this slice. It shares the unchanged non-district renderer path with the hangar, which
+was smoked through the real flow. Waived, not recorded as passed.
