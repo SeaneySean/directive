@@ -181,4 +181,5 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | merged 26 Sep |
 | 7e-rules | Fog of war, enemy memory, radar data, district generator, fog-aware squad AI (opt-in until the renderer lands) | worker → critic | merged 26 Sep |
 | 7e-render | Camera, fog rendering, radar panel, city tileset, campaign activation | merged 26 Sep | one send-back: squad spawns clustered; 00-start-fog.png retaken by the critic through the real flow, the other 7e shots were hook-driven and belong to the 7d retake list |
+| 7f-dressing | Building heights and facades, road markings and kerbs, lamp/tree/crate props, player walk tween (Sean 26 Sep: "it's the look", "they jump") | worker | building |
 | 7d | Polish, Loom, Skool post | conductor | last |

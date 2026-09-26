@@ -16,7 +16,8 @@ Last updated: 26 Sep 2026, night. Three days left. Deadline: 30 Sep 2026.
 | 7b | Persistent squad: HP and kills carry over, promotion at 5 kills, deaths cost 40 to replace | merged |
 | 7a-spawn | Missions spawn from your actions, one or two open at a time, sidebar tabs, map clear | merged; PLAY THIS |
 | 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | **merged 26 Sep late; PLAY THIS.** Generated missions are now real levels: district maps with buildings, fog of war, radar bottom-left, scrolling camera (drag, edge, WASD). Sent back once because the squad spawned scattered along the start edge; fixed |
-| 7d | Polish, Loom, Skool post | last |
+| 7f | Your 26 Sep playtest ("it's the look", "they jump"): building heights and facades, road markings, kerbs, lamps and trees, soldiers walk their path instead of teleporting | building overnight; must merge by end of 27 Sep |
+| 7d | Polish, art batch wiring, Loom, Skool post | 28–29 Sep |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
 
 ## What I need from Sean
