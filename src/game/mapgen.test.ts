@@ -91,6 +91,21 @@ for (const type of TYPES) {
             }
           }
         }
+
+        // Assassination bodyguards hold the host doorway (adjacent, never on it).
+        if (objective.kind === 'assassinate') {
+          const target = scenario.units.find((unit) => unit.id === objective.targetId)!;
+          const host = district.buildings.find((b) =>
+            b.x <= target.pos.x && target.pos.x < b.x + b.w && b.y <= target.pos.y && target.pos.y < b.y + b.h
+          )!;
+          const hostDoorwayKeys = new Set(host.doorways.map(key));
+          for (const bg of scenario.units.filter((unit) => unit.team === 'alien' && unit.stance === 'hold')) {
+            expect(host.doorways.some((d) =>
+              Math.max(Math.abs(d.x - bg.pos.x), Math.abs(d.y - bg.pos.y)) === 1,
+            ), `${message} bodyguard ${key(bg.pos)} adjacent to a host doorway`).toBe(true);
+            expect(hostDoorwayKeys.has(key(bg.pos)), `${message} bodyguard not on a doorway`).toBe(false);
+          }
+        }
       }
     });
 
@@ -196,11 +211,24 @@ for (const type of TYPES) {
         expect(surfaceAt(district, grid, target.pos)).toBe('interior');
         expect(target.pos.y).toBeLessThan(Math.floor(grid.height / 3));
         const bodyguards = aliens.filter((unit) => unit.stance === 'hold');
-        const doorways = district.buildings.flatMap((b) => b.doorways);
+        const allDoorways = district.buildings.flatMap((b) => b.doorways);
+        const host = district.buildings.find((b) =>
+          b.x <= target.pos.x && target.pos.x < b.x + b.w && b.y <= target.pos.y && target.pos.y < b.y + b.h
+        )!;
+        const hostDoorways = host.doorways;
         for (const bg of bodyguards) {
-          expect(Math.max(Math.abs(bg.pos.x - target.pos.x), Math.abs(bg.pos.y - target.pos.y))).toBe(1);
-          expect(doorways.some((d) => d.x === bg.pos.x && d.y === bg.pos.y)).toBe(false);
+          // Adjacent (Chebyshev 1) to a host doorway.
+          expect(hostDoorways.some((d) =>
+            Math.max(Math.abs(d.x - bg.pos.x), Math.abs(d.y - bg.pos.y)) === 1
+          )).toBe(true);
+          // Occupies no doorway itself.
+          expect(allDoorways.some((d) => d.x === bg.pos.x && d.y === bg.pos.y)).toBe(false);
+          // Does not overlap the target.
+          expect(bg.pos.x === target.pos.x && bg.pos.y === target.pos.y).toBe(false);
         }
+        // Distinct from each other.
+        const guardKeys = bodyguards.map((bg) => key(bg.pos));
+        expect(new Set(guardKeys).size).toBe(bodyguards.length);
         // Exits are walkable tiles on the far edge.
         const exits = (scenario.objective as { kind: 'assassinate'; exits: Vec[] }).exits;
         for (const e of exits) {

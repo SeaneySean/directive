@@ -271,12 +271,27 @@ export function generateMission(type: MissionType, path: InfluencePath, seed: nu
     const target = [...(farFloors.length ? farFloors : interior)].sort((a, b) => b.y - a.y || b.x - a.x)[0]!;
     reserve(target);
 
-    const beside = interior.filter((p) =>
-      (p.x !== target.x || p.y !== target.y)
-      && Math.max(Math.abs(p.x - target.x), Math.abs(p.y - target.y)) === 1,
-    );
-    if (beside.length < 3) throw new Error(`no room for bodyguards beside the target (seed ${seed})`);
-    const bodyguards = pickDistinct(beside, 3, randInt);
+    // Bodyguards hold the host building's doorways: distinct unoccupied floor
+    // tiles Chebyshev-adjacent to a doorway tile (excluding the doorways
+    // themselves); inside or outside the building is fine.
+    const doorwayKeys = new Set(keyBuilding.doorways.map(keyOf));
+    const guardPool: Vec[] = [];
+    const seenGuards = new Set<string>();
+    for (const d of keyBuilding.doorways) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const p = { x: d.x + dx, y: d.y + dy };
+          const k = keyOf(p);
+          if (seenGuards.has(k)) continue;
+          seenGuards.add(k);
+          if (!walkable(p) || doorwayKeys.has(k) || reserved.has(k)) continue;
+          guardPool.push(p);
+        }
+      }
+    }
+    if (guardPool.length < 3) throw new Error(`no room for bodyguards beside the doorways (seed ${seed})`);
+    const bodyguards = pickDistinct(guardPool, 3, randInt);
     for (const p of bodyguards) reserve(p);
     aliens = [
       fleeingTarget('t1', target.x, target.y),
