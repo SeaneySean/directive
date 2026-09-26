@@ -70,6 +70,15 @@ Make it an actual game level."
     a target bearing, the target found inside a building, and a recover extraction. Orpheus
     plays one assassination to completion on a district map and records the seed and outcome.
 
+## Art and feel references for Part 2 (designer, 26 Sep)
+
+- **Syndicate (1993):** a scrolling playfield of about 510x400 on an isometric grid of 64x48
+  tiles. Ours: fixed 64x32 tiles (our 2:1 diamond) on district boards, scrolling, no auto-fit.
+- **X-COM: UFO Defense:** unexplored ground is solid black with hard edges that advance as
+  soldiers move; revealed ground stays fully lit while in sight and dims out of sight; the
+  control bar is screen-fixed along the bottom; enemies appear only when a soldier sees them.
+  Reference frames: `docs/reference/xcom-*.jpg` (from the video at t=3:27).
+
 ## Out of scope
 
 Overwatch, grenades, sound, new unit art, changes to the story missions' maps, mobile.
