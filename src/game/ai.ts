@@ -1,8 +1,9 @@
 import { previewShot } from './combat.ts';
 import { hasLineOfSight, inCover } from './los.ts';
-import { distance, isWalkable, key, manhattan, neighbors4, tileAt } from './map.ts';
+import { distance, isWalkable, key, manhattan, neighbors4, same, tileAt } from './map.ts';
 import { reachable } from './pathfinding.ts';
 import { canAct, endTurn, livingUnits, moveUnit, shoot, unitById } from './state.ts';
+import { hasFog, knownEnemies } from './visibility.ts';
 import type { GameState, ScenarioObjective, Team, Unit, Vec } from './types.ts';
 
 /** Minimum hit chance the AI will accept before it prefers to reposition. */
@@ -19,6 +20,11 @@ export interface AiStep {
 }
 
 export type AiPolicy = (state: GameState, unitId: string) => AiStep;
+
+/** Enemies the squad can see and target (fog) or all living aliens (no fog). */
+function squadEnemies(state: GameState): Unit[] {
+  return hasFog(state) ? knownEnemies(state) : livingUnits(state, 'alien');
+}
 
 function bestTarget(state: GameState, unit: Unit, enemies: Unit[]): { target: Unit; chance: number } | null {
   let best: { target: Unit; chance: number } | null = null;
@@ -185,6 +191,34 @@ function pathDistanceTo(state: GameState, from: Vec, to: Vec, movingUnitId: stri
 }
 
 /**
+ * BFS distance from `source` over walkable tiles, blocking the mover's allies
+ * (enemy units do not block, matching pathDistanceTo). One BFS yields distances
+ * to every tile, so callers score many candidate destinations from a single pass.
+ */
+function distanceField(state: GameState, source: Vec, mover: Unit): Map<string, number> {
+  const blocked = new Set(
+    state.units
+      .filter((unit) => unit.alive && unit.id !== mover.id && unit.team === mover.team)
+      .map((unit) => key(unit.pos)),
+  );
+  const dist = new Map<string, number>();
+  const queue: Vec[] = [];
+  dist.set(key(source), 0);
+  queue.push(source);
+  while (queue.length) {
+    const current = queue.shift()!;
+    const d = dist.get(key(current))!;
+    for (const next of neighbors4(current)) {
+      const k = key(next);
+      if (dist.has(k) || !isWalkable(state.grid, next) || blocked.has(k)) continue;
+      dist.set(k, d + 1);
+      queue.push(next);
+    }
+  }
+  return dist;
+}
+
+/**
  * Lowest-HP (then highest chance, then id) legal target, shared by the smart
  * squad and the smart enemy policy.
  */
@@ -209,24 +243,32 @@ function lowestHpTarget(state: GameState, unit: Unit, enemies: Unit[]): Unit | n
  */
 export function advanceSmart(state: GameState, unitId: string): AiStep {
   const unit = unitById(state, unitId);
-  const enemies = livingUnits(state, unit.team === 'alien' ? 'squad' : 'alien');
-  if (!canAct(state, unit) || enemies.length === 0) return { kind: 'wait', unitId };
+  const enemies = unit.team === 'alien' ? livingUnits(state, 'squad') : squadEnemies(state);
+  if (!canAct(state, unit)) return { kind: 'wait', unitId };
+  if (enemies.length === 0) {
+    // A squad unit with no visible enemy explores rather than idling on a fog
+    // map; an enemy smart unit with no target waits.
+    if (unit.team === 'squad' && hasFog(state)) return exploreStep(state, unit);
+    return { kind: 'wait', unitId };
+  }
 
   const target = lowestHpTarget(state, unit, enemies);
   if (target) return { kind: 'shoot', unitId, targetId: target.id };
 
   // Chase the enemy we can actually reach (wall-aware path distance), so a wall
-  // stub is walked around rather than forming a deadlock.
+  // stub is walked around rather than forming a deadlock. One distance field
+  // from the nearest enemy scores every candidate cheaply.
   const nearestEnemy = [...enemies].sort((left, right) =>
     pathDistanceTo(state, unit.pos, left.pos, unit.id) - pathDistanceTo(state, unit.pos, right.pos, unit.id)
     || left.id.localeCompare(right.id),
   )[0]!;
-  const currentDistance = pathDistanceTo(state, unit.pos, nearestEnemy.pos, unit.id);
+  const field = distanceField(state, nearestEnemy.pos, unit);
+  const currentDistance = field.get(key(unit.pos)) ?? Infinity;
   const candidates = [...reachable(state.grid, state.units, unit.pos, unit.move).values()]
     .filter((node) => node.dist > 0)
     .map((node) => ({
       pos: node.pos,
-      distance: pathDistanceTo(state, node.pos, nearestEnemy.pos, unit.id),
+      distance: field.get(key(node.pos)) ?? Infinity,
       covered: inCover(state.grid, node.pos, nearestEnemy.pos),
     }))
     .filter((candidate) => candidate.distance < currentDistance)
@@ -248,6 +290,10 @@ export function advanceSmart(state: GameState, unitId: string): AiStep {
 function decideFlee(state: GameState, unit: Unit): AiStep {
   const unitId = unit.id;
   if (!canAct(state, unit)) return { kind: 'wait', unitId };
+  // District assassinations wait until the target is first spotted, so a target
+  // can never escape before any sighting. Hand-authored assassinations flee
+  // immediately (no fog).
+  if (hasFog(state) && !state.assassinationAlerted) return { kind: 'wait', unitId };
   const objective = state.objective;
   const exits = objective?.kind === 'assassinate' ? objective.exits : [];
   if (exits.length === 0) return { kind: 'wait', unitId };
@@ -275,7 +321,7 @@ function decideFlee(state: GameState, unit: Unit): AiStep {
 }
 
 /** The tile a squad unit should advance toward, by objective kind. */
-function squadGoal(state: GameState, unit: Unit, objective: ScenarioObjective): Vec | null {
+function squadGoal(state: GameState, unit: Unit, objective: ScenarioObjective, enemies: Unit[]): Vec | null {
   switch (objective.kind) {
     case 'hold':
       return objective.tile;
@@ -293,29 +339,29 @@ function squadGoal(state: GameState, unit: Unit, objective: ScenarioObjective): 
       return objective.tile;
     }
     case 'assassinate': {
-      const target = state.units.find((u) => u.id === objective.targetId);
-      return target && target.alive ? target.pos : null;
+      // A visible target is chased at its live tile; a hidden target is chased
+      // at its last-known stored tile, then the district search marker. The live
+      // hidden position is never used, so unseen movement cannot steer pursuit.
+      const known = enemies.find((u) => u.id === objective.targetId);
+      if (known) return known.pos;
+      const stored = state.knownEnemyPositions[objective.targetId];
+      if (stored) return { ...stored };
+      return state.district?.searchMarker ? { ...state.district.searchMarker } : null;
     }
     case 'clash':
       return null;
   }
 }
 
-/** Move one step-size toward `goal`, preferring directional cover from the nearest enemy. */
-function objectiveMove(state: GameState, unit: Unit, goal: Vec): AiStep {
-  const enemies = livingUnits(state, unit.team === 'alien' ? 'squad' : 'alien');
-  const nearestEnemy = enemies.length
-    ? [...enemies].sort((left, right) =>
-        manhattan(unit.pos, left.pos) - manhattan(unit.pos, right.pos)
-        || left.id.localeCompare(right.id),
-      )[0]!
-    : null;
-  const currentDistance = pathDistanceTo(state, unit.pos, goal, unit.id);
+/** Move one step-size toward `goal`, preferring directional cover from `nearestEnemy`. */
+function moveToward(state: GameState, unit: Unit, goal: Vec, nearestEnemy: Unit | null): AiStep {
+  const field = distanceField(state, goal, unit);
+  const currentDistance = field.get(key(unit.pos)) ?? Infinity;
   const candidates = [...reachable(state.grid, state.units, unit.pos, unit.move).values()]
     .filter((node) => node.dist > 0)
     .map((node) => ({
       pos: node.pos,
-      distance: pathDistanceTo(state, node.pos, goal, unit.id),
+      distance: field.get(key(node.pos)) ?? Infinity,
       covered: nearestEnemy ? inCover(state.grid, node.pos, nearestEnemy.pos) : false,
     }))
     .filter((candidate) => candidate.distance < currentDistance)
@@ -330,10 +376,43 @@ function objectiveMove(state: GameState, unit: Unit, goal: Vec): AiStep {
     : { kind: 'wait', unitId: unit.id };
 }
 
+/**
+ * The nearest unexplored reachable floor tile, found by BFS so ties break in a
+ * deterministic order (distance, then row, then column). Null when everything
+ * reachable is explored.
+ */
+function nearestUnexplored(state: GameState, unit: Unit): Vec | null {
+  const blocked = new Set(
+    state.units
+      .filter((other) => other.alive && other.id !== unit.id && other.team === unit.team)
+      .map((other) => key(other.pos)),
+  );
+  const seen = new Set([key(unit.pos)]);
+  const queue: Array<{ pos: Vec; dist: number }> = [{ pos: unit.pos, dist: 0 }];
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current.dist > 0 && !state.explored[current.pos.y * state.grid.width + current.pos.x]) return current.pos;
+    for (const next of neighbors4(current.pos)) {
+      const k = key(next);
+      if (seen.has(k) || !isWalkable(state.grid, next) || blocked.has(k)) continue;
+      seen.add(k);
+      queue.push({ pos: next, dist: current.dist + 1 });
+    }
+  }
+  return null;
+}
+
+/** Walk toward the nearest unexplored frontier; waits only when none remains. */
+function exploreStep(state: GameState, unit: Unit): AiStep {
+  const target = nearestUnexplored(state, unit);
+  if (!target) return { kind: 'wait', unitId: unit.id };
+  return moveToward(state, unit, target, null);
+}
+
 /** Objective-aware squad policy used by the headless balance harness. */
 export function squadPolicy(state: GameState, unitId: string): AiStep {
   const unit = unitById(state, unitId);
-  const enemies = livingUnits(state, unit.team === 'alien' ? 'squad' : 'alien');
+  const enemies = squadEnemies(state);
   if (!canAct(state, unit)) return { kind: 'wait', unitId };
 
   const objective = state.objective;
@@ -341,15 +420,34 @@ export function squadPolicy(state: GameState, unitId: string): AiStep {
   // Clash (and no objective): pure combat, team-neutral.
   if (!objective || objective.kind === 'clash') return advanceSmart(state, unitId);
 
-  // Any objective type: shoot the lowest-HP legal target when one exists.
+  // Any objective type: shoot the lowest-HP known (visible) target when one exists.
   const shot = lowestHpTarget(state, unit, enemies);
   if (shot) return { kind: 'shoot', unitId, targetId: shot.id };
 
   // Otherwise advance toward the objective goal (hold tile, recover pickup or
   // extraction, assassination interception).
-  const goal = squadGoal(state, unit, objective);
-  if (!goal) return { kind: 'wait', unitId };
-  return objectiveMove(state, unit, goal);
+  const goal = squadGoal(state, unit, objective, enemies);
+  if (goal && same(unit.pos, goal)) {
+    // Standing on the goal is correct for hold/recover (hold / pick up on the
+    // turn end); for an assassination last-known tile it means the target has
+    // moved on, so explore instead.
+    return objective.kind === 'assassinate' && !enemies.some((u) => u.id === objective.targetId)
+      ? exploreStep(state, unit)
+      : { kind: 'wait', unitId };
+  }
+  if (goal && isWalkable(state.grid, goal) && pathDistanceTo(state, unit.pos, goal, unit.id) < Infinity) {
+    const nearestEnemy = enemies.length
+      ? [...enemies].sort((left, right) =>
+          manhattan(unit.pos, left.pos) - manhattan(unit.pos, right.pos)
+          || left.id.localeCompare(right.id),
+        )[0]!
+      : null;
+    return moveToward(state, unit, goal, nearestEnemy);
+  }
+
+  // No actionable goal (blocked/stale marker, or none): explore the frontier so
+  // the squad never stalls.
+  return exploreStep(state, unit);
 }
 
 export function applyStep(state: GameState, step: AiStep): GameState {

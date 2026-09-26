@@ -89,6 +89,9 @@ function battleState(
     reinforcementsSpawned: 0,
     carrierId: null,
     killsBy,
+    explored: [],
+    knownEnemyPositions: {},
+    assassinationAlerted: false,
   };
 }
 
