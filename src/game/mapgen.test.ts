@@ -280,3 +280,30 @@ describe('district determinism and copies', () => {
     expect(b.district!.surfaces[0]).toBe(scenario.district!.surfaces[0]);
   });
 });
+
+describe('district squad clustering', () => {
+  test('200 seeds per type across paths spawn a tight, centred, contiguous squad', () => {
+    for (const type of TYPES) {
+      for (const path of PATHS) {
+        for (let seed = 1; seed <= 200; seed++) {
+          const scenario = generateMission(type, path, seed);
+          const squad = scenario.units.filter((unit) => unit.team === 'squad');
+          const message = `${type} ${path} seed ${seed}`;
+          expect(squad).toHaveLength(4);
+          const xs = squad.map((unit) => unit.pos.x).sort((a, b) => a - b);
+          const spread = xs[3]! - xs[0]!;
+          expect(spread, `${message} x-spread`).toBeLessThanOrEqual(4);
+          // Every member within Chebyshev 7 of the first (same row, tight run).
+          const first = squad[0]!;
+          for (const s of squad) {
+            expect(Math.max(Math.abs(s.pos.x - first.pos.x), Math.abs(s.pos.y - first.pos.y)), `${message} Chebyshev`).toBeLessThanOrEqual(7);
+          }
+          // Distinct walkable spawns on the same near-edge row.
+          expect(new Set(squad.map((s) => key(s.pos))).size).toBe(4);
+          const ys = new Set(squad.map((s) => s.pos.y));
+          expect(ys.size, `${message} single row`).toBe(1);
+        }
+      }
+    }
+  });
+});

@@ -1,6 +1,10 @@
 export const TILE_W = 60;
 export const TILE_H = 30;
 
+/** Fixed, readable tile size for district boards (the Syndicate 64x32 2:1 diamond). */
+export const DISTRICT_TILE_W = 64;
+export const DISTRICT_TILE_H = 32;
+
 export interface ScreenPoint {
   x: number;
   y: number;
@@ -46,6 +50,23 @@ export function gridToScreen(point: GridPoint, origin: ScreenPoint, tileW = TILE
   return {
     x: origin.x + (point.x - point.y) * (tileW / 2),
     y: origin.y + (point.x + point.y) * (tileH / 2),
+  };
+}
+
+/**
+ * Fixed-size (non-auto-fit) layout for district boards: readable 64x32 tiles
+ * with headroom for raised building walls and ~1.6-tall unit sprites. The
+ * camera scrolls inside this world; see BattleScene.
+ */
+export function districtLayout(width: number, height: number): TileLayout {
+  void width;
+  return {
+    tileW: DISTRICT_TILE_W,
+    tileH: DISTRICT_TILE_H,
+    origin: {
+      x: (height - 1) * (DISTRICT_TILE_W / 2) + 64,
+      y: 208,
+    },
   };
 }
 

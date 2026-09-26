@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { boardLayout, gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
+import { boardLayout, districtLayout, gridToScreen, screenToGrid, tileDepth, TILE_H, TILE_W } from './iso.ts';
 
 const origin = { x: 490, y: 78 };
 
@@ -71,6 +71,27 @@ describe('board auto-fit', () => {
           expect(centre.x + tileW / 2).toBeLessThanOrEqual(1000);
           expect(centre.y - tileH / 2).toBeGreaterThanOrEqual(0);
           expect(centre.y + tileH / 2).toBeLessThanOrEqual(720);
+        }
+      }
+    }
+  });
+});
+
+describe('district fixed-size layout', () => {
+  test('uses the 64x32 2:1 diamond, no auto-fit', () => {
+    const layout = districtLayout(40, 40);
+    expect(layout.tileW).toBe(64);
+    expect(layout.tileH).toBe(32);
+  });
+
+  test('round-trips every tile at 36x36 and 40x40 through the district projection', () => {
+    for (const size of [36, 40]) {
+      const { tileW, tileH, origin: o } = districtLayout(size, size);
+      for (let y = 0; y < size; y += 7) {
+        for (let x = 0; x < size; x += 7) {
+          const tile = { x, y };
+          const screen = gridToScreen(tile, o, tileW, tileH);
+          expect(screenToGrid(screen, o, tileW, tileH)).toEqual(tile);
         }
       }
     }

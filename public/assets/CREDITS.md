@@ -60,3 +60,23 @@ column pillars as cover):
 
 The decorative water surrounding the Atlantis board is drawn procedurally in the
 renderer (no Kenney texture used).
+
+## Kenney Isometric Tiles: Buildings (city district tileset)
+
+- Pack: **Isometric Tiles: Buildings**
+- Author: Kenney Vleugels (Kenney.nl)
+- Source: https://kenney.nl/assets/isometric-tiles-buildings
+- Licence: Creative Commons Zero (CC0 1.0)
+- Licence URL: https://creativecommons.org/publicdomain/zero/1.0/
+
+Vendored for the district (generated-mission) renderer, cropped to each tile's tight
+bounding box (`scripts/vendor-city.py`). The brief names this "Kenney's Isometric
+City"; there is no pack by that exact name, so the city-building pack and the Isometric
+Miniature: Prototype pack (below) cover the requested texture set:
+
+- `battle/city-wall.png` — from `buildingTiles_000.png` (a building block: roof top + two windowed facades)
+- `battle/city-roof.png` — from `buildingTiles_005.png` (flat roof top face)
+- `battle/city-prop-tree.png`, `city-prop-tree2.png` — from `buildingTiles_057.png` / `buildingTiles_061.png` (street trees)
+- `battle/city-door.png` — from Isometric Miniature: Prototype `doorOpen_N.png` (open doorway)
+- `battle/city-prop-crate.png` — from Isometric Miniature: Prototype `crate_N.png`
+- `battle/city-road.png` / `city-pavement.png` — flat ground top faces from Isometric Miniature: Prototype `floor_N.png`, tinted per surface (road / pavement) by the renderer
