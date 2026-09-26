@@ -9,7 +9,10 @@ designer for this project (see `docs/ART-PROMPTS.md`). They are not third-party 
 - `event-<id>.jpg` (candidate, leak, whistleblower, miracle, summit)
 - `briefing-area-51.jpg`, `briefing-atlantis.jpg`
 - `portraits/*.jpg` (cole, diaz, okafor, reyes)
-- `units/*.png` (soldier, guard, guardian, sectoid)
+- `units/*.png` (soldier, guard, guardian, sectoid, operative)
+- `briefing-recover.jpg`, `briefing-assassinate.jpg`, `briefing-clash.jpg`
+- `portraits/guard.jpg`, `guardian.jpg`, `operative.jpg`, `target.jpg`
+- `ui/mission-glyph.png`, `ui/world-alert.png`
 
 ## Kenney Isometric Blocks
 
