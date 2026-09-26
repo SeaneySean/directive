@@ -51,6 +51,35 @@ export interface Unit {
 
 export type Outcome = 'playing' | 'won' | 'lost';
 
+/**
+ * District surface tag, parallel to the collision grid. 'road' is the road
+ * grid and outer border streets; 'pavement' is sidewalk around blocks; 'plaza'
+ * is an open empty block; 'interior' is a building floor inside its walls.
+ * Only meaningful on floor tiles (walls/covers carry 'road' as a filler).
+ */
+export type SurfaceTag = 'road' | 'pavement' | 'plaza' | 'interior';
+
+export interface DistrictBuilding {
+  id: number;
+  /** Inclusive rectangular outer footprint (the wall perimeter). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 1-tile floor doorways connecting the interior to the outside. */
+  doorways: Vec[];
+}
+
+/** Optional, pure-data district metadata attached to generated scenarios. */
+export interface DistrictMetadata {
+  /** Row-major (width*height) surface tag per tile. */
+  surfaces: SurfaceTag[];
+  /** Rectangular buildings covering blocks, with their doorway tiles. */
+  buildings: DistrictBuilding[];
+  /** Initial radar search marker (the assassination spawn district centre). */
+  searchMarker: Vec;
+}
+
 export interface LogEntry {
   round: number;
   text: string;
@@ -76,6 +105,14 @@ export interface GameState {
   carrierId: string | null;
   /** Kills credited to each attacker this battle, keyed by unit id. */
   killsBy: Record<string, number>;
+  /** Row-major explored bitmap (width*height); a tile becomes explored once any living squad unit can see it. */
+  explored: boolean[];
+  /** Last-known positions of hostile units, keyed by id, updated only while visible. */
+  knownEnemyPositions: Record<string, Vec>;
+  /** For district assassinations: latches true when the target first becomes squad-visible. */
+  assassinationAlerted: boolean;
+  /** Copied district metadata, or undefined for hand-authored scenarios (no fog). */
+  district?: DistrictMetadata;
 }
 
 export type ObjectiveKind = 'hold' | 'recover' | 'assassinate' | 'clash';
@@ -112,4 +149,6 @@ export interface Scenario {
   units: Unit[];
   objective?: ScenarioObjective;
   reinforcements?: Reinforcements;
+  /** Optional district metadata (generated missions). Absent on hand-authored scenarios. */
+  district?: DistrictMetadata;
 }

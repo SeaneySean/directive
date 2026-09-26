@@ -2,9 +2,20 @@ import { previewShot } from './combat.ts';
 import { inBounds, isWalkable, parseMap, same } from './map.ts';
 import { reachable } from './pathfinding.ts';
 import { rollPercent } from './rng.ts';
-import type { GameState, Reinforcements, Scenario, ScenarioObjective, Team, Unit, Vec } from './types.ts';
+import { hasFog, isKnownEnemy, refreshMemory } from './visibility.ts';
+import type { DistrictMetadata, GameState, Reinforcements, Scenario, ScenarioObjective, Team, Unit, Vec } from './types.ts';
 
 // All functions here are pure: they take a state and return a new one.
+
+/** Deep copy optional district metadata so games never share mutable surface data. */
+function cloneDistrict(district: DistrictMetadata | undefined): DistrictMetadata | undefined {
+  if (!district) return undefined;
+  return {
+    surfaces: district.surfaces.slice(),
+    buildings: district.buildings.map((b) => ({ ...b, doorways: b.doorways.map((d) => ({ ...d })) })),
+    searchMarker: { ...district.searchMarker },
+  };
+}
 
 /** Deep copy an objective so games never share mutable objective fields. */
 function cloneObjective(objective: ScenarioObjective): ScenarioObjective {
@@ -30,8 +41,9 @@ export function createGame(scenario: Scenario, seed = 1): GameState {
         unit: { ...scenario.reinforcements.unit, weapon: { ...scenario.reinforcements.unit.weapon } },
       }
     : undefined;
-  return {
-    grid: parseMap(scenario.rows),
+  const grid = parseMap(scenario.rows);
+  const initial: GameState = {
+    grid,
     units: scenario.units.map((u) => ({ ...u, pos: { ...u.pos }, weapon: { ...u.weapon } })),
     turn: 'squad',
     round: 1,
@@ -45,7 +57,13 @@ export function createGame(scenario: Scenario, seed = 1): GameState {
     reinforcementsSpawned: 0,
     carrierId: null,
     killsBy: {},
+    explored: new Array(grid.width * grid.height).fill(false),
+    knownEnemyPositions: {},
+    assassinationAlerted: false,
+    district: cloneDistrict(scenario.district),
   };
+  // Explore and seed enemy memory from the squad's opening visibility.
+  return refreshMemory(initial);
 }
 
 export function unitById(state: GameState, id: string): Unit {
@@ -95,7 +113,7 @@ export function moveUnit(state: GameState, unitId: string, to: Vec): GameState {
   const node = reach.get(`${to.x},${to.y}`);
   if (!node || node.dist === 0) return state;
   const moved = { ...unit, pos: { ...to }, ap: unit.ap - 1 };
-  return replaceUnit(state, moved);
+  return refreshMemory(replaceUnit(state, moved));
 }
 
 export interface ShotResult {
@@ -112,6 +130,9 @@ export function shoot(state: GameState, attackerId: string, targetId: string): S
   const attacker = unitById(state, attackerId);
   const target = unitById(state, targetId);
   if (!canAct(state, attacker)) return null;
+  // Fog: the squad may only shoot enemies it can currently see. Reject without
+  // spending AP or advancing the RNG.
+  if (hasFog(state) && attacker.team === 'squad' && !isKnownEnemy(state, target)) return null;
   const preview = previewShot(state.grid, attacker, target);
   if (!preview) return null;
 
@@ -139,6 +160,7 @@ export function shoot(state: GameState, attackerId: string, targetId: string): S
     }
   }
   next = checkOutcome(next);
+  next = refreshMemory(next);
   return { state: next, hit, chance: preview.chance, roll, damage, killed };
 }
 
@@ -235,7 +257,9 @@ export function endTurn(state: GameState): GameState {
   let next: GameState = { ...state, units, turn: nextTeam, round, selectedId: null };
   // Reinforcements arrive on the squad-to-alien transition at a scheduled round.
   if (nextTeam === 'alien') next = maybeSpawnReinforcement(next);
-  return log(next, nextTeam === 'squad' ? `Round ${round}: your move.` : 'Enemy turn.');
+  next = log(next, nextTeam === 'squad' ? `Round ${round}: your move.` : 'Enemy turn.');
+  // Refresh visibility after the turn flip, AP refill and any arrival.
+  return refreshMemory(next);
 }
 
 /** True when the alien turn beginning at `round` is a scheduled arrival. */
