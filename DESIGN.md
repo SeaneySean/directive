@@ -178,6 +178,6 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 7a-rules | Objective types (hold/recover/assassinate/clash), smart and flee stances, map generator, missions harness | worker → critic | merged 23 Sep |
 | 7a-campaign | Offers per region, rewards, agent cost, saves, world and battle UI, manual assassination gate | worker → critic | merged 23 Sep |
 | 7b | Persistent squad, roster, promotions, replacements | worker → critic | merged 23 Sep |
-| 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | next |
-| 7e | Real levels: 36x36+ districts, fog of war, radar, camera, city tileset (two runs) | worker → critic | after 7a-spawn |
+| 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | merged 26 Sep |
+| 7e | Real levels: 36x36+ districts, fog of war, radar, camera, city tileset (two runs) | worker → critic | Part 1 building |
 | 7d | Polish, Loom, Skool post | conductor | last |

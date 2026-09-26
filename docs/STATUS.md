@@ -1,6 +1,6 @@
 # Illuminatus — status (kept current by the critic)
 
-Last updated: 26 Sep 2026, morning. Four days left. Deadline: 30 Sep 2026.
+Last updated: 26 Sep 2026, evening. Four days left. Deadline: 30 Sep 2026.
 
 ## Where things are
 
@@ -14,8 +14,8 @@ Last updated: 26 Sep 2026, morning. Four days left. Deadline: 30 Sep 2026.
 | 7a-rules | The three mission types and the map generator as rules (not yet visible in the game) | merged |
 | 7a-campaign | Missions offered per region on the world map, rewards, the UI for all three types | merged; PLAY THIS |
 | 7b | Persistent squad: HP and kills carry over, promotion at 5 kills, deaths cost 40 to replace | merged |
-| 7a-spawn | Your 23 Sep note: missions spawn from your actions, one or two open at a time, panel out of the map | Orpheus building now (OpenRouter credit restored 26 Sep) |
-| 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | brief written, replaces 7c; runs right after 7a-spawn |
+| 7a-spawn | Missions spawn from your actions, one or two open at a time, sidebar tabs, map clear | merged; PLAY THIS |
+| 7e | Your 26 Sep note: real levels, big district maps with buildings, fog of war, radar with target bearing, scrolling camera | part 1 (rules) building now; part 2 (camera, fog, radar, city tiles) next |
 | 7d | Polish, Loom, Skool post | last |
 | 6c-ship | Mobile sizing, Loom, Skool post | last |
 
