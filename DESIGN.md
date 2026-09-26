@@ -180,5 +180,5 @@ grey, no bare rectangles, nothing important under 11px, every screen readable at
 | 7b | Persistent squad, roster, promotions, replacements | worker → critic | merged 23 Sep |
 | 7a-spawn | Missions spawn from actions, max two open, expiry, panel moved into the HUD | worker → critic | merged 26 Sep |
 | 7e-rules | Fog of war, enemy memory, radar data, district generator, fog-aware squad AI (opt-in until the renderer lands) | worker → critic | merged 26 Sep |
-| 7e-render | Camera, fog rendering, radar panel, city tileset, campaign activation | worker → critic | building |
+| 7e-render | Camera, fog rendering, radar panel, city tileset, campaign activation | critic → worker | sent back 26 Sep: cluster squad spawns (mapgen), retake screenshots |
 | 7d | Polish, Loom, Skool post | conductor | last |
